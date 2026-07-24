@@ -26,10 +26,10 @@ jobs:
     timeout-minutes: 25
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.14"
           cache: pip
@@ -64,7 +64,7 @@ jobs:
           "Built $exe ({0:N1} MB)" -f ((Get-Item $exe).Length / 1MB)
 
       - name: Upload executable
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: CrimsonFabPublisher-${{ github.sha }}
           path: dist/CrimsonFabPublisher.exe
@@ -80,7 +80,8 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/download-artifact@v4
+      # Independently versioned from upload-artifact — the major numbers differ.
+      - uses: actions/download-artifact@v8
         with:
           name: CrimsonFabPublisher-${{ github.sha }}
           path: dist
