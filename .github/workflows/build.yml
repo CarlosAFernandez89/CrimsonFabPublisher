@@ -1,0 +1,97 @@
+name: Build
+
+# Windows-only by necessity: the app reads the Windows registry to find engine
+# installs and PyInstaller produces a native .exe, so there is nothing useful to
+# build on another runner.
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push makes an in-flight run obsolete, except on tags where the run
+# produces a release artifact.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests
+        env:
+          # The UI smoke tests build real widgets; the runner has no display.
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest -q
+
+      - name: Build executable
+        run: python -m PyInstaller --noconfirm --clean CrimsonFabPublisher.spec
+
+      - name: Verify the bundle
+        shell: pwsh
+        run: |
+          $exe = "dist/CrimsonFabPublisher.exe"
+          if (-not (Test-Path $exe)) { throw "PyInstaller produced no executable" }
+
+          # The theme degrades silently to palette-only if the stylesheet is
+          # missing from the bundle, which is invisible when running from source.
+          $bytes = [System.IO.File]::ReadAllBytes($exe)
+          $text = [System.Text.Encoding]::ASCII.GetString($bytes)
+          if (-not $text.Contains("crimson.qss")) { throw "crimson.qss is not bundled" }
+
+          "Built $exe ({0:N1} MB)" -f ((Get-Item $exe).Length / 1MB)
+
+      - name: Upload executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: CrimsonFabPublisher-${{ github.sha }}
+          path: dist/CrimsonFabPublisher.exe
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    # Publish only for version tags, and only once the build has passed.
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: CrimsonFabPublisher-${{ github.sha }}
+          path: dist
+
+      # gh is preinstalled on the runner, so this needs no third-party action.
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            dist/CrimsonFabPublisher.exe \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes
