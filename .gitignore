@@ -1,0 +1,53 @@
+# --- Python ---------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+
+# --- Virtual environments -------------------------------------------------
+.venv/
+venv/
+env/
+
+# --- Build output ---------------------------------------------------------
+# PyInstaller writes both of these; the .spec is source and stays tracked.
+build/
+dist/
+*.manifest
+
+# The standard Python .gitignore drops *.spec, which would lose the hand-tuned
+# PyInstaller spec this project depends on. Ignore only stray generated ones.
+*.spec
+!CrimsonFabPublisher.spec
+
+# --- Test / tooling caches ------------------------------------------------
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+.coverage.*
+
+# --- IDEs -----------------------------------------------------------------
+.idea/
+.vs/
+*.code-workspace
+
+# --- Claude Code ----------------------------------------------------------
+# Personal overrides. A shared .claude/settings.json stays tracked if added.
+.claude/settings.local.json
+
+# --- OS -------------------------------------------------------------------
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+# --- App runtime ----------------------------------------------------------
+# config.json / state.json live in %APPDATA%, not here, but keep stray copies
+# and exported diagnostics out of the repo.
+*.log
+config.json
+state.json
