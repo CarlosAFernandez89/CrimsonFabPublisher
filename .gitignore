@@ -37,6 +37,7 @@ htmlcov/
 # --- Claude Code ----------------------------------------------------------
 # Personal overrides. A shared .claude/settings.json stays tracked if added.
 .claude/settings.local.json
+CLAUDE.md
 
 # --- OS -------------------------------------------------------------------
 Thumbs.db
