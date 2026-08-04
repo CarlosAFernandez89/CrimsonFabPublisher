@@ -9,12 +9,16 @@ from pathlib import Path
 from PySide6.QtCore import QThread, Signal
 
 from ..builder import kill_process_tree, run_build
+from ..dependencies import transitive_dependencies
 from ..models import BuildResult, EngineInfo, Platform, PluginInfo
 from ..shipfilter import ShipFilter
 
 
 class BuildWorker(QThread):
     log = Signal(str)
+    #: UBT action lines, delivered as they happen rather than when UAT
+    #: finally flushes. Emitted from the tailer thread, so queued like the rest.
+    progress_line = Signal(str)
     plugin_started = Signal(str)
     plugin_finished = Signal(object)  # BuildResult
     progress = Signal(int, int)       # done, total
@@ -30,10 +34,14 @@ class BuildWorker(QThread):
         output_dir: Path,
         dry_run: bool = False,
         parent=None,
+        all_plugins: list[PluginInfo] | None = None,
     ):
         super().__init__(parent)
         self._engine = engine
         self._jobs = jobs
+        # Suite dependencies must be staged even when they are not being built,
+        # so resolve them against every known plugin, not just the queue.
+        self._all_plugins = list(all_plugins) if all_plugins else list(jobs)
         self._platforms = platforms
         self._work_root = Path(work_root)
         self._ship_filter = ShipFilter(ship_patterns)
@@ -70,6 +78,17 @@ class BuildWorker(QThread):
         with self._proc_lock:
             self._proc = None
 
+    def _dependencies_for(self, plugin: PluginInfo) -> list[PluginInfo]:
+        """Sibling plugins `plugin` needs, transitively, in build order.
+
+        BuildPlugin's host project contains only the target plugin, so anything
+        in the suite it depends on has to be handed over explicitly.
+        """
+        names = transitive_dependencies(self._all_plugins, [plugin.name])
+        names.discard(plugin.name)
+        return [p for p in sorted(self._all_plugins, key=lambda p: p.order)
+                if p.name in names]
+
     def run(self) -> None:
         results: list[BuildResult] = []
         failed: set[str] = set()
@@ -104,6 +123,8 @@ class BuildWorker(QThread):
                     log=self.log.emit,
                     dry_run=self._dry_run,
                     on_process_started=self._track,
+                    dependencies=self._dependencies_for(plugin),
+                    on_progress_line=self.progress_line.emit,
                 )
             finally:
                 self._untrack()

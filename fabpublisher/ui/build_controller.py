@@ -11,16 +11,21 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
-from ..builder import submission_zip_name
+from ..builder import BUILT_DIRNAME, built_uplugin, submission_zip_name
+from ..dependencies import transitive_dependencies
 from ..models import BuildResult, EngineInfo, Platform, PluginInfo, PluginStatus
 from ..state import StateStore
 from ..validation import Issue, check_zip_size
+from .build_progress import BuildProgress
 from .build_worker import BuildWorker
 from .log_model import LogLevel, LogRecord, classify_uat_line
 
 #: Batch interval for log delivery. A big build emits thousands of lines and a
 #: per-line model insert visibly stalls the view.
 FLUSH_MS = 100
+
+#: Sub-steps per plugin on the fine-grained progress bar.
+PROGRESS_SCALE = 200
 
 
 @dataclass(frozen=True)
@@ -33,6 +38,10 @@ class BuildRequest:
     output_dir: Path
     hashes: dict[str, str] = field(default_factory=dict)
     dry_run: bool = False
+    #: Every discovered plugin, not just the ones being built. A job's suite
+    #: dependencies must be staged for it even when they are not themselves
+    #: selected, so they have to be resolvable from here.
+    all_plugins: list[PluginInfo] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -47,17 +56,52 @@ class Preflight:
         return not self.blockers
 
 
+def unbuildable_dependencies(
+    output_dir: Path, jobs: list[PluginInfo], all_plugins: list[PluginInfo]
+) -> list[Issue]:
+    """Jobs whose suite dependencies have not been built yet.
+
+    A dependency counts as satisfied when it is already published to
+    ``_Built/``, or when it is queued earlier in this same run — the queue is in
+    topological order, so it will exist by the time the dependent starts.
+    Without that second case, a first-ever "build everything" would be refused
+    outright even though the order is already correct.
+    """
+    satisfied: set[str] = set()
+    issues: list[Issue] = []
+    for job in sorted(jobs, key=lambda p: p.order):
+        needed = transitive_dependencies(all_plugins, [job.name]) - {job.name}
+        missing = sorted(
+            name
+            for name in needed
+            if name not in satisfied and not built_uplugin(output_dir, name).is_file()
+        )
+        if missing:
+            issues.append(
+                Issue(
+                    "error",
+                    f"{job.name} needs {', '.join(missing)} built first. "
+                    f"Tick them too, or build them before this one so they are "
+                    f"published to {BUILT_DIRNAME}/.",
+                )
+            )
+        satisfied.add(job.name)
+    return issues
+
+
 def preflight(
     engine: EngineInfo | None,
     platforms: Platform,
     selection: set[str],
     jobs: list[PluginInfo],
     issues: dict[str, list[Issue]] | None = None,
+    output_dir: Path | None = None,
+    all_plugins: list[PluginInfo] | None = None,
 ) -> Preflight:
     """Everything that used to be a QMessageBox, as data.
 
-    Only the three run gates block. Per-plugin validation problems are surfaced
-    as warnings — the same non-blocking treatment they have always had.
+    Only the run gates block. Per-plugin validation problems are surfaced as
+    warnings — the same non-blocking treatment they have always had.
     """
     blockers: list[Issue] = []
     if engine is None:
@@ -66,6 +110,10 @@ def preflight(
         blockers.append(Issue("error", "Select at least one target platform."))
     if not selection:
         blockers.append(Issue("error", "Tick at least one plugin to build."))
+    if output_dir is not None:
+        blockers.extend(
+            unbuildable_dependencies(output_dir, jobs, all_plugins or jobs)
+        )
 
     warnings: list[Issue] = []
     for job in jobs:
@@ -80,6 +128,9 @@ class BuildController(QObject):
     plugin_finished = Signal(object)  # BuildResult
     status_changed = Signal(str, object, str)  # name, PluginStatus, reason
     progress = Signal(int, int)  # done, total
+    #: Fine-grained progress within the run: plugins finished plus the
+    #: fraction of the one compiling, scaled by PROGRESS_SCALE.
+    fine_progress = Signal(int, int)  # value, maximum
     records = Signal(list)  # list[LogRecord] — always a batch
     finished = Signal(list, bool)  # results, cancelled
 
@@ -89,6 +140,7 @@ class BuildController(QObject):
         self._worker: BuildWorker | None = None
         self._request: BuildRequest | None = None
         self._buffer: list[LogRecord] = []
+        self._progress = BuildProgress()
         self._current = ""
         self._done = 0
         self._cancel_requested = False
@@ -129,6 +181,7 @@ class BuildController(QObject):
         self._current = ""
         self._done = 0
         self._cancel_requested = False
+        self._progress = BuildProgress(len(request.jobs))
 
         total = len(request.jobs)
         prefix = "DRY RUN — " if request.dry_run else ""
@@ -145,8 +198,10 @@ class BuildController(QObject):
             ship_patterns=request.ship_patterns,
             output_dir=request.output_dir,
             dry_run=request.dry_run,
+            all_plugins=request.all_plugins or request.jobs,
         )
         self._worker.log.connect(self._on_worker_log)
+        self._worker.progress_line.connect(self._on_progress_line)
         self._worker.plugin_started.connect(self._on_plugin_started)
         self._worker.plugin_finished.connect(self._on_plugin_finished)
         self._worker.progress.connect(self.progress)
@@ -164,9 +219,28 @@ class BuildController(QObject):
             LogRecord(text=text, level=classify_uat_line(text), source=self._current)
         )
 
+    def _on_progress_line(self, text: str) -> None:
+        """UBT's per-action counter — the only sub-plugin progress there is.
+
+        Deliberately not driven from the log stream: UAT delivers a whole
+        pass's worth of these at once when its child exits, which moves the bar
+        in one jump after minutes of stillness. The worker sources them from
+        UBT's own log instead, and guarantees each arrives once.
+        """
+        if self._progress.note(text):
+            self._emit_fine_progress()
+
+    def _emit_fine_progress(self) -> None:
+        maximum = max(self._progress.total, 1) * PROGRESS_SCALE
+        self.fine_progress.emit(
+            min(int(self._progress.value * PROGRESS_SCALE), maximum), maximum
+        )
+
     def _on_plugin_started(self, name: str) -> None:
         self._current = name
         total = len(self._request.jobs) if self._request else 0
+        self._progress.start_plugin()
+        self._emit_fine_progress()
         self._done += 1
         self.log(f"{name}  [{self._done}/{total}]", source=name, group=True)
         self.status_changed.emit(name, PluginStatus.BUILDING, "")
@@ -174,6 +248,10 @@ class BuildController(QObject):
 
     def _on_plugin_finished(self, result: BuildResult) -> None:
         request = self._request
+        # Snap the bar to the plugin boundary: the estimate deliberately never
+        # reaches 1.0, so only finishing can close the gap.
+        self._progress.finish_plugin(self._done)
+        self._emit_fine_progress()
         if result.success and result.zip_path is not None:
             self.status_changed.emit(result.plugin_name, PluginStatus.SUCCESS, "")
             # The 15 GiB FAB ceiling — previously written but never called.

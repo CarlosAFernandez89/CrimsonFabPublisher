@@ -9,6 +9,16 @@ def test_default_excludes_build_artifacts():
     assert not f.should_exclude("Source/Module/Module.cpp")
 
 
+def test_default_excludes_markdown_at_any_depth():
+    """Whatever the name, whatever the folder — no .md reaches a submission."""
+    f = ShipFilter()
+    assert f.should_exclude("README.md")
+    assert f.should_exclude("Resources/Wiki/_AUTHORING.md")
+    assert f.should_exclude("Resources/Wiki/Images/CrimsonAbilitySystem/PNGRequirements.md")
+    assert not f.should_exclude("Resources/Wiki/CrimsonCamera.json")
+    assert not f.should_exclude("Resources/Wiki/Images/CrimsonAbilitySystem/qs-enable-plugin.png")
+
+
 def test_extension_glob_any_depth():
     f = ShipFilter(["*.md"])
     assert f.should_exclude("README.md")
@@ -21,6 +31,15 @@ def test_directory_pattern():
     assert f.should_exclude("Docs/x.txt")
     assert f.should_exclude("Sub/Docs/y.txt")
     assert not f.should_exclude("Documentation/z.txt")
+
+
+def test_multi_segment_directory_pattern():
+    f = ShipFilter(["Resources/Wiki/"])
+    assert f.should_exclude("Resources/Wiki/_AUTHORING.md")
+    assert f.should_exclude("Resources/Wiki/Images/shot.png")
+    assert f.should_exclude("Plugin/Resources/Wiki/x.json")
+    assert not f.should_exclude("Resources/Icon128.png")
+    assert not f.should_exclude("Wiki/x.json")
 
 
 def test_path_glob():

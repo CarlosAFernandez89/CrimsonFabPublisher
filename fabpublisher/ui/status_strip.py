@@ -117,7 +117,7 @@ class BuildStatusStrip(QFrame):
         self._current = ""
         self._platforms = platforms
         self._set_state("building")
-        self.progress.setRange(0, max(total, 1))
+        self.progress.setRange(0, max(total, 1) * 200)
         self.progress.setValue(0)
         self.progress.show()
         self.open_btn.hide()
@@ -129,10 +129,17 @@ class BuildStatusStrip(QFrame):
         self._tick()
 
     def set_progress(self, done: int, total: int) -> None:
+        """Plugin-level counts, shown as text only.
+
+        The bar itself is driven by `set_fine_progress`, which moves during a
+        compile instead of only at plugin boundaries.
+        """
         self._done, self._total = done, total
-        self.progress.setRange(0, max(total, 1))
-        self.progress.setValue(done)
         self._tick()
+
+    def set_fine_progress(self, value: int, maximum: int) -> None:
+        self.progress.setRange(0, max(maximum, 1))
+        self.progress.setValue(value)
 
     def set_current(self, name: str) -> None:
         self._current = name

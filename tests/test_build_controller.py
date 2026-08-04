@@ -81,10 +81,32 @@ def test_platform_arg_uses_uat_names_in_order():
     assert platform_arg(Platform.NONE) == ""
 
 
-def test_build_command_shape_is_unchanged():
+def test_build_command_shape():
     cmd = build_command(ENGINE, _plugin("Core"), Path("E:/work/Core_Build"), Platform.WIN64)
     assert cmd[0].endswith("RunUAT.bat")
     assert cmd[1] == "BuildPlugin"
-    assert "-Rocket" in cmd and "-StrictIncludes" in cmd
-    assert "-NoHostPlatform" in cmd and "-CreateSubFolder" in cmd
     assert cmd[-1] == "-TargetPlatforms=Win64"
+
+
+def test_build_command_disables_pch_and_unity():
+    """-StrictIncludes is UE 5.8's only route to -NoPCH -NoSharedPCH -DisableUnity."""
+    cmd = build_command(ENGINE, _plugin("Core"), Path("E:/work/Core_Build"), Platform.WIN64)
+    assert "-StrictIncludes" in cmd
+
+
+def test_build_command_drops_flags_ue58_no_longer_parses():
+    cmd = build_command(ENGINE, _plugin("Core"), Path("E:/work/Core_Build"), Platform.WIN64)
+    assert "-Rocket" not in cmd
+    # A subfolder would push the .uplugin out of the zip root, which FAB requires.
+    assert "-CreateSubFolder" not in cmd
+    assert "-PackageAppendPluginSubdir" not in cmd
+    # The editor target must build so editor-only modules are actually validated.
+    assert "-NoHostPlatform" not in cmd
+
+
+def test_build_command_targets_the_staged_descriptor():
+    staged = Path("E:/work/Core_Staged/Core.uplugin")
+    cmd = build_command(
+        ENGINE, _plugin("Core"), Path("E:/work/Core_Build"), Platform.WIN64, staged
+    )
+    assert f"-Plugin={staged}" in cmd

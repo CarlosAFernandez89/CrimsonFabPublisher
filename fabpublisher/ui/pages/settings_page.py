@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
 from ...config import config_path, data_dir, state_path
 from ...engines import engine_from_root
 from ...shipfilter import DEFAULT_PATTERNS
-from ..app_settings import AppSettings
+from ..app_settings import AppSettings, default_output_dir
 from ..theme import color, mono_font
 
 WORK_ROOT = Path(tempfile.gettempdir()) / "CrimsonFabPublisher_Work"
@@ -90,7 +90,7 @@ class SettingsPage(QWidget):
         )
 
         self.output_edit = QLineEdit(self.settings.output_dir)
-        self.output_edit.setPlaceholderText("Defaults to the plugins folder")
+        self.output_edit.setPlaceholderText(str(default_output_dir()))
         self.output_edit.editingFinished.connect(self._commit_output)
         layout.addLayout(
             self._path_row("Output folder", self.output_edit, self._browse_output)

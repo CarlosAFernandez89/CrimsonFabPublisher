@@ -92,6 +92,9 @@ class PluginInfo:
     dependency_names: list[str] = field(default_factory=list)
     # Populated after classification / analysis:
     dependencies: list[Dependency] = field(default_factory=list)
+    #: Fab submission-form counts, filled in by the scan.
+    blueprint_count: int = 0
+    cpp_class_count: int = 0
     status: PluginStatus = PluginStatus.UNKNOWN
     order: int = 0
 

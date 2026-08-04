@@ -142,6 +142,7 @@ class MainWindow(QMainWindow):
         self.build.started.connect(self._on_build_started)
         self.build.plugin_started.connect(self.strip.set_current)
         self.build.progress.connect(self.strip.set_progress)
+        self.build.fine_progress.connect(self.strip.set_fine_progress)
         self.build.finished.connect(self._on_build_finished)
 
         self.strip.cancel_requested.connect(self._cancel_build)
@@ -286,6 +287,8 @@ class MainWindow(QMainWindow):
             checked,
             jobs,
             self._issues,
+            self.settings.effective_output_dir(),
+            self.model.plugins(),
         )
         self.build_page.refresh(jobs, checked, checks)
 
@@ -307,6 +310,8 @@ class MainWindow(QMainWindow):
             checked,
             jobs,
             self._issues,
+            self.settings.effective_output_dir(),
+            self.model.plugins(),
         )
         if not checks.ok:
             # The page already shows these; the button is disabled too.
@@ -336,6 +341,7 @@ class MainWindow(QMainWindow):
                 output_dir=output_dir,
                 hashes=self._current_hashes,
                 dry_run=dry_run,
+                all_plugins=self.model.plugins(),
             )
         )
 

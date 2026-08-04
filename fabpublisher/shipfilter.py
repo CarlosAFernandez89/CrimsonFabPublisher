@@ -6,13 +6,18 @@ import fnmatch
 from collections.abc import Iterable
 
 # Always stripped from a submission regardless of user settings. These are
-# build artifacts / VCS metadata that must never ship to FAB.
+# build artifacts / VCS metadata that must never ship to FAB, plus markdown:
+# authoring notes sit interleaved with shipping content at arbitrary depth
+# (Resources/Wiki/Images/<Plugin>/PNGRequirements.md), so matching by
+# extension everywhere is the only rule that cannot be outrun by a new file
+# in a new folder. Nothing UE loads at runtime is markdown.
 DEFAULT_PATTERNS: tuple[str, ...] = (
     "Binaries/",
     "Intermediate/",
     "Saved/",
     "DerivedDataCache/",
     ".git/",
+    "*.md",
 )
 
 
@@ -43,9 +48,17 @@ class ShipFilter:
 
         for pat in self.patterns:
             if pat.endswith("/"):
-                # Directory pattern: exclude if any parent dir matches.
+                # Directory pattern: exclude if any parent dir matches. A
+                # multi-segment pattern ("Resources/Wiki/") has to be matched
+                # against a run of that many components — testing it against
+                # single components can never hit, so it silently excluded
+                # nothing.
                 dir_glob = pat[:-1]
-                if any(fnmatch.fnmatch(d, dir_glob) for d in dirs):
+                span = dir_glob.count("/") + 1
+                if any(
+                    fnmatch.fnmatch("/".join(dirs[i : i + span]), dir_glob)
+                    for i in range(len(dirs) - span + 1)
+                ):
                     return True
             elif "/" in pat:
                 # Path glob relative to the plugin root.

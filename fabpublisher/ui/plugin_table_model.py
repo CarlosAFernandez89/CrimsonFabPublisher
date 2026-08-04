@@ -11,7 +11,9 @@ from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
 from ..models import DependencyKind, PluginInfo, PluginStatus
 from .theme import color, mono_font
 
-COLUMNS = ["#", "", "Plugin", "Version", "Engine", "Modules", "Deps", "Status"]
+COLUMNS = [
+    "#", "", "Plugin", "Version", "Engine", "Modules", "Deps", "BP", "C++", "Status"
+]
 (
     COL_ORDER,
     COL_CHECK,
@@ -20,11 +22,22 @@ COLUMNS = ["#", "", "Plugin", "Version", "Engine", "Modules", "Deps", "Status"]
     COL_ENGINE,
     COL_MODULES,
     COL_DEPS,
+    COL_BLUEPRINTS,
+    COL_CPP,
     COL_STATUS,
-) = range(8)
+) = range(10)
 
 #: Columns carrying machine truth, set in monospace.
-_MONO_COLUMNS = {COL_ORDER, COL_NAME, COL_VERSION, COL_ENGINE, COL_MODULES, COL_DEPS}
+_MONO_COLUMNS = {
+    COL_ORDER,
+    COL_NAME,
+    COL_VERSION,
+    COL_ENGINE,
+    COL_MODULES,
+    COL_DEPS,
+    COL_BLUEPRINTS,
+    COL_CPP,
+}
 
 StatusRole = Qt.UserRole + 1
 PluginRole = Qt.UserRole + 2
@@ -51,7 +64,9 @@ class PluginTableModel(QAbstractTableModel):
         self._plugins = plugins
         names = {p.name for p in plugins}
         self._checked &= names
-        self._reasons = {k: v for k, v in self._reasons.items() if k in names}
+        # Every status here is freshly computed by the scan, so any build-time
+        # reason held over would explain a state that no longer exists.
+        self._reasons.clear()
         self.endResetModel()
 
     def set_impact(self, impact: dict[str, str]) -> None:
@@ -76,8 +91,13 @@ class PluginTableModel(QAbstractTableModel):
         for row, plugin in enumerate(self._plugins):
             if plugin.name == name:
                 plugin.status = status
+                # The reason belongs to the status it arrived with: a later
+                # status carrying none must not inherit the old explanation,
+                # or a fixed plugin keeps reading "(Build failed ...)".
                 if reason:
                     self._reasons[name] = reason
+                else:
+                    self._reasons.pop(name, None)
                 left = self.index(row, 0)
                 right = self.index(row, COL_STATUS)
                 self.dataChanged.emit(left, right)
@@ -134,7 +154,12 @@ class PluginTableModel(QAbstractTableModel):
         if role == Qt.FontRole and col in _MONO_COLUMNS:
             return self._mono
 
-        if role == Qt.TextAlignmentRole and col in (COL_ORDER, COL_MODULES):
+        if role == Qt.TextAlignmentRole and col in (
+            COL_ORDER,
+            COL_MODULES,
+            COL_BLUEPRINTS,
+            COL_CPP,
+        ):
             return int(Qt.AlignRight | Qt.AlignVCenter)
 
         if role == Qt.ForegroundRole:
@@ -165,6 +190,10 @@ class PluginTableModel(QAbstractTableModel):
             return str(len(plugin.modules))
         if col == COL_DEPS:
             return self._deps_text(plugin)
+        if col == COL_BLUEPRINTS:
+            return str(plugin.blueprint_count)
+        if col == COL_CPP:
+            return str(plugin.cpp_class_count)
         return None
 
     def _deps_text(self, plugin: PluginInfo) -> str:
@@ -190,7 +219,7 @@ class PluginTableModel(QAbstractTableModel):
             d.kind is DependencyKind.EXTERNAL for d in plugin.dependencies
         ):
             return QColor(color("danger"))
-        if col in (COL_VERSION, COL_MODULES):
+        if col in (COL_VERSION, COL_MODULES, COL_BLUEPRINTS, COL_CPP):
             return QColor(color("text_secondary"))
         return None
 
@@ -216,6 +245,19 @@ class PluginTableModel(QAbstractTableModel):
         if col == COL_DEPS and plugin.dependencies:
             return "\n".join(
                 f"{d.name} · {d.kind.value}" for d in plugin.dependencies
+            )
+        if col == COL_BLUEPRINTS:
+            return (
+                f"Blueprints: {plugin.blueprint_count}\n"
+                "Blueprint assets under Content/ (levels excluded).\n"
+                "Paste into the Fab 'Blueprints' field."
+            )
+        if col == COL_CPP:
+            return (
+                f"C++ classes: {plugin.cpp_class_count}\n"
+                "Classes and structs defined in Source/ headers,\n"
+                "reflected or not (Source/ThirdParty excluded).\n"
+                "Paste into the Fab 'C++ classes' field."
             )
         if col == COL_STATUS:
             reason = self._reasons.get(plugin.name)

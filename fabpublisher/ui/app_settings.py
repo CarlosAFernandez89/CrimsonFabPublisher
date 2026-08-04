@@ -11,8 +11,22 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal
 
-from ..config import Config
+from ..config import Config, data_dir
 from ..models import Platform
+
+#: Folder name used when the user has not chosen an output location.
+SUBMISSIONS_DIRNAME = "FabSubmissions"
+
+
+def default_output_dir() -> Path:
+    """Where zips go when no output folder is set.
+
+    The app's own data folder, not somewhere near the plugins: a folder the app
+    invents inside a user's project tree is one they never asked for and cannot
+    identify. Here it sits beside the config and state files, namespaced by the
+    app, on the system drive.
+    """
+    return data_dir() / SUBMISSIONS_DIRNAME
 
 
 def platform_from_mask(value: object) -> Platform:
@@ -77,8 +91,15 @@ class AppSettings(QObject):
             self.output_dir_changed.emit(value)
 
     def effective_output_dir(self) -> Path:
-        """Where zips land. An empty output folder means "beside the plugins"."""
-        return Path(self._c.output_dir or self._c.plugins_root)
+        """Where zips land.
+
+        An unset output folder gets a dedicated app-owned folder rather than the
+        plugins root — writing zips in among the plugin folders would put build
+        products inside a version-controlled source tree.
+        """
+        if self._c.output_dir:
+            return Path(self._c.output_dir)
+        return default_output_dir()
 
     # ----------------------------------------------------------------- engine
     @property

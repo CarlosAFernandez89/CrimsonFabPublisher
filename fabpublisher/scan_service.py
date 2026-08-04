@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from graphlib import CycleError
 from pathlib import Path
 
+from .assetstats import count_blueprints, count_cpp_classes
 from .dependencies import classify_dependencies, resubmit_set, topological_order
 from .discovery import discover_plugins, engine_builtin_plugin_names
 from .models import DependencyKind, EngineInfo, PluginInfo, PluginStatus
@@ -87,6 +88,8 @@ class ScanService:
         issues: dict[str, list[Issue]] = {}
         for plugin in plugins:
             plugin.status = _status_for(plugin, impact.get(plugin.name))
+            plugin.blueprint_count = count_blueprints(plugin.path)
+            plugin.cpp_class_count = count_cpp_classes(plugin.path)
             found = validate_plugin(plugin, engine_version)
             if found:
                 issues[plugin.name] = found
