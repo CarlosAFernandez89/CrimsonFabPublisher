@@ -13,6 +13,7 @@ from PySide6.QtGui import QColor, QFontMetrics, QPainter
 from PySide6.QtWidgets import QStyledItemDelegate
 
 from ..models import PluginStatus
+from .listing_table_model import ChipColorRole, ChipRole
 from .plugin_table_model import ReasonRole, StatusRole
 from .theme import mono_font, status_color
 
@@ -29,13 +30,29 @@ class StatusPillDelegate(QStyledItemDelegate):
 
     def _text(self, index) -> str:
         status = index.data(StatusRole)
-        label = status.value if isinstance(status, PluginStatus) else str(status or "")
+        if not isinstance(status, PluginStatus):
+            return str(index.data(ChipRole) or "")
         reason = index.data(ReasonRole) or ""
+        label = status.value
         return f"{label} ({reason})" if reason and reason != label else label
 
-    def paint(self, painter: QPainter, option, index) -> None:
+    def _accent(self, index) -> str | None:
+        """The chip colour, from either kind of status.
+
+        The PluginStatus branch stays first so the Plugins table renders
+        exactly as it did; anything else falls back to a plain chip role, which
+        is how the listing table reuses this delegate rather than cloning it.
+        """
         status = index.data(StatusRole)
-        if not isinstance(status, PluginStatus):
+        if isinstance(status, PluginStatus):
+            return status_color(status)
+        if index.data(ChipRole):
+            return index.data(ChipColorRole)
+        return None
+
+    def paint(self, painter: QPainter, option, index) -> None:
+        accent_hex = self._accent(index)
+        if accent_hex is None:
             super().paint(painter, option, index)
             return
 
@@ -46,7 +63,7 @@ class StatusPillDelegate(QStyledItemDelegate):
         if option.state & option.state.__class__.State_Selected:
             painter.fillRect(option.rect, option.palette.highlight())
 
-        accent = QColor(status_color(status))
+        accent = QColor(accent_hex)
         tint = QColor(accent)
         tint.setAlpha(TINT_ALPHA)
 

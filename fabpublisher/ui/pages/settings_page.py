@@ -20,39 +20,26 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 from ...config import config_path, data_dir, state_path
 from ...engines import engine_from_root
+from ...listing import prompt as prompt_mod
 from ...shipfilter import DEFAULT_PATTERNS
-from ..app_settings import AppSettings, default_output_dir
+from ..app_settings import AppSettings, default_listings_dir, default_output_dir
+from ..cards import card as _card
 from ..theme import color, mono_font
 
 WORK_ROOT = Path(tempfile.gettempdir()) / "CrimsonFabPublisher_Work"
 
 
-def _card(title: str, blurb: str = "") -> tuple[QFrame, QVBoxLayout]:
-    frame = QFrame()
-    frame.setObjectName("card")
-    layout = QVBoxLayout(frame)
-    layout.setContentsMargins(16, 13, 16, 14)
-    layout.setSpacing(9)
-    label = QLabel(title)
-    label.setObjectName("cardTitle")
-    layout.addWidget(label)
-    if blurb:
-        hint = QLabel(blurb)
-        hint.setProperty("role", "caption")
-        hint.setWordWrap(True)
-        layout.addWidget(hint)
-    return frame, layout
-
-
 class SettingsPage(QWidget):
     plugins_root_changed = Signal()
     build_history_reset = Signal()
+    listings_dir_changed = Signal()
     engine_roots_changed = Signal()
 
     def __init__(self, settings: AppSettings, parent=None):
@@ -69,6 +56,7 @@ class SettingsPage(QWidget):
         layout.setContentsMargins(18, 16, 18, 18)
         layout.setSpacing(14)
         layout.addWidget(self._paths())
+        layout.addWidget(self._listings())
         layout.addWidget(self._engines())
         layout.addWidget(self._packaging())
         layout.addWidget(self._defaults())
@@ -111,6 +99,178 @@ class SettingsPage(QWidget):
         note.setProperty("role", "hint")
         layout.addWidget(note)
         return card
+
+    # -------------------------------------------------------------- listings
+    def _listings(self) -> QFrame:
+        card, layout = _card(
+            "Fab listings",
+            "Where authored listing copy, media and submission snapshots live. "
+            "Defaults to your Documents folder; point it at a repository you "
+            "control if you want the snapshots version-controlled — they are "
+            "the only record of what you actually submitted.",
+        )
+
+        self.listings_edit = QLineEdit(self.settings.listings_dir)
+        self.listings_edit.setPlaceholderText(str(default_listings_dir()))
+        self.listings_edit.editingFinished.connect(self._commit_listings)
+        layout.addLayout(
+            self._path_row(
+                "Listings folder", self.listings_edit, self._browse_listings
+            )
+        )
+
+        self.claude_edit = QLineEdit(self.settings.claude_path)
+        self.claude_edit.editingFinished.connect(self._commit_claude)
+        layout.addLayout(
+            self._path_row("Claude CLI", self.claude_edit, self._browse_claude)
+        )
+        self.claude_status = QLabel("")
+        self.claude_status.setProperty("role", "hint")
+        layout.addWidget(self.claude_status)
+        self._refresh_claude_status()
+
+        note = QLabel(
+            "Fab documents neither FAQ nor changelog edits, so both are treated "
+            "as review-triggering. Turn one off only once you have watched Fab "
+            "apply that edit without a re-review."
+        )
+        note.setProperty("role", "hint")
+        note.setWordWrap(True)
+        layout.addWidget(note)
+
+        self.faq_review = QCheckBox("A FAQ edit re-enters Fab review")
+        self.faq_review.setChecked(self.settings.listing_faq_review)
+        self.faq_review.toggled.connect(
+            lambda v: setattr(self.settings, "listing_faq_review", v)
+        )
+        layout.addWidget(self.faq_review)
+
+        self.changelog_review = QCheckBox("A changelog edit re-enters Fab review")
+        self.changelog_review.setChecked(self.settings.listing_changelog_review)
+        self.changelog_review.toggled.connect(
+            lambda v: setattr(self.settings, "listing_changelog_review", v)
+        )
+        layout.addWidget(self.changelog_review)
+
+        layout.addWidget(self._prompt_editor())
+        return card
+
+    def _prompt_editor(self) -> QWidget:
+        """The drafting prompt, collapsed by default.
+
+        Good copy for a gameplay framework is not good copy for an editor tool,
+        and only the publisher knows which they are shipping - so the prompt is
+        theirs to edit. It is long, though, and almost never changed, so it
+        stays folded away rather than dominating the page.
+        """
+        holder = QWidget()
+        outer = QVBoxLayout(holder)
+        outer.setContentsMargins(0, 4, 0, 0)
+        outer.setSpacing(6)
+
+        self.prompt_toggle = QToolButton()
+        self.prompt_toggle.setText("Drafting prompt")
+        self.prompt_toggle.setCheckable(True)
+        self.prompt_toggle.setChecked(False)
+        self.prompt_toggle.setAutoRaise(True)
+        self.prompt_toggle.setArrowType(Qt.RightArrow)
+        self.prompt_toggle.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self.prompt_toggle.setCursor(Qt.PointingHandCursor)
+        self.prompt_toggle.toggled.connect(self._toggle_prompt)
+        outer.addWidget(self.prompt_toggle, 0, Qt.AlignLeft)
+
+        self.prompt_body = QWidget()
+        body = QVBoxLayout(self.prompt_body)
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSpacing(6)
+
+        hint = QLabel(
+            "Sent to Claude when you press Ask Claude. These placeholders are "
+            "filled in: "
+            + ", ".join("{" + name + "}" for name in prompt_mod.PLACEHOLDERS)
+            + ". {requirements} is generated from Fab's published rules, so "
+            "removing it means the drafter no longer knows what the validator "
+            "will check."
+        )
+        hint.setProperty("role", "hint")
+        hint.setWordWrap(True)
+        body.addWidget(hint)
+
+        self.prompt_edit = QPlainTextEdit()
+        self.prompt_edit.setFont(mono_font(8.5))
+        self.prompt_edit.setPlainText(
+            self.settings.listing_prompt_template or prompt_mod.DEFAULT_TEMPLATE
+        )
+        self.prompt_edit.setMinimumHeight(260)
+        body.addWidget(self.prompt_edit)
+
+        row = QHBoxLayout()
+        save = QPushButton("Save prompt")
+        save.clicked.connect(self._commit_prompt)
+        reset = QPushButton("Reset to default")
+        reset.setProperty("variant", "ghost")
+        reset.clicked.connect(self._reset_prompt)
+        row.addWidget(save)
+        row.addWidget(reset)
+        row.addStretch(1)
+        body.addLayout(row)
+
+        self.prompt_body.setVisible(False)
+        outer.addWidget(self.prompt_body)
+        return holder
+
+    def _toggle_prompt(self, shown: bool) -> None:
+        self.prompt_toggle.setArrowType(Qt.DownArrow if shown else Qt.RightArrow)
+        self.prompt_body.setVisible(shown)
+
+    def _commit_prompt(self) -> None:
+        text = self.prompt_edit.toPlainText().strip()
+        # Storing the default verbatim would freeze it: a later improvement to
+        # the built-in prompt would never reach anyone who had opened this box.
+        self.settings.listing_prompt_template = (
+            "" if text == prompt_mod.DEFAULT_TEMPLATE.strip() else text
+        )
+        self.settings.save()
+
+    def _reset_prompt(self) -> None:
+        self.prompt_edit.setPlainText(prompt_mod.DEFAULT_TEMPLATE)
+        self.settings.listing_prompt_template = ""
+        self.settings.save()
+
+    def _refresh_claude_status(self) -> None:
+        from ..draft_worker import resolve_cli
+
+        found = resolve_cli(self.settings.claude_path)
+        self.claude_status.setText(
+            f"Found: {found}"
+            if found
+            else "Not found. Ask Claude falls back to copying the prompt."
+        )
+        self.claude_status.setProperty("state", "" if found else "warn")
+        self.claude_status.style().unpolish(self.claude_status)
+        self.claude_status.style().polish(self.claude_status)
+
+    def _commit_listings(self) -> None:
+        text = self.listings_edit.text().strip()
+        if text != self.settings.listings_dir:
+            self.settings.listings_dir = text
+            self.listings_dir_changed.emit()
+
+    def _commit_claude(self) -> None:
+        self.settings.claude_path = self.claude_edit.text().strip()
+        self._refresh_claude_status()
+
+    def _browse_listings(self) -> None:
+        folder = QFileDialog.getExistingDirectory(self, "Select listings folder")
+        if folder:
+            self.listings_edit.setText(folder)
+            self._commit_listings()
+
+    def _browse_claude(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Select the Claude CLI")
+        if path:
+            self.claude_edit.setText(path)
+            self._commit_claude()
 
     def _path_row(
         self, label: str, edit: QLineEdit, handler, browse_label: str = "Browse…"

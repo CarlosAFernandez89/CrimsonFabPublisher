@@ -31,19 +31,8 @@ from ...models import (
 )
 from ...platforms import PlatformAvailability, available_mask, setup_guide
 from ..app_settings import AppSettings
+from ..cards import card as _card
 from ..theme import color, icons, mono_font
-
-
-def _card(title: str) -> tuple[QFrame, QVBoxLayout]:
-    frame = QFrame()
-    frame.setObjectName("card")
-    layout = QVBoxLayout(frame)
-    layout.setContentsMargins(16, 13, 16, 14)
-    layout.setSpacing(9)
-    label = QLabel(title)
-    label.setObjectName("cardTitle")
-    layout.addWidget(label)
-    return frame, layout
 
 
 class BuildPage(QWidget):

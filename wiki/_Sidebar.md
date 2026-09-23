@@ -7,6 +7,7 @@
 - [Engine Detection](Engine-Detection)
 - [Target Platforms](Target-Platforms)
 - [Packaging](Packaging)
+- [Listings](Listings)
 
 **Understanding it**
 - [How Change Detection Works](How-Change-Detection-Works)

@@ -27,13 +27,16 @@ source, and tells you exactly what needs rebuilding — then builds it in the ri
 - **Toolchain aware** — checks the installed Linux toolchain against the exact version your
   engine pins, instead of failing at link time
 - **Real cancel** — kills the whole compiler process tree in ~2s, not "after the current plugin"
+- **Listing staging** — generates the paste-ready listing text, checks it against Fab's
+  published requirements, and diffs it against what you last submitted so you can see
+  which edits will cost you a review
 - **Diagnostics** — structured logs with severity, per-plugin grouping and export
 
 ## What it does not do
 
 It does not upload anything. Despite the name there is no Fab API integration, no
 authentication, and no network access — `QtNetwork` is excluded from the build. It produces
-the zips and opens the folder; you drag them into the Fab seller portal.
+the zips and the listing text; you drag them into the Fab seller portal yourself.
 
 ## Install
 
@@ -60,6 +63,25 @@ python main.py
 
 Full walkthrough: [Getting Started](https://github.com/CarlosAFernandez89/CrimsonFabPublisher/wiki/Getting-Started).
 
+## Listings
+
+Building the zip is half a submission. The other half is the listing page, and Fab has no API
+for it — so it gets typed into the web form by hand, every time, with no record of what you
+last sent.
+
+The **Listings** page writes the text for you to paste, validates it against
+[Fab's published requirements](https://www.fab.com/o/technical-requirements) before you start,
+and remembers what you submitted. On the next update it tells you which fields moved and,
+crucially, **which of them re-enter Fab review** — Fab applies tag and price edits instantly
+but sends a description or thumbnail change back through approval.
+
+There is also an **Ask Claude** button that drafts the description from what the app already
+knows about the plugin — its modules, dependencies, and Blueprint and C++ counts. It needs the
+[Claude CLI](https://claude.com/claude-code); without it, the button copies the prompt instead.
+
+Your copy lives in a folder you choose (defaulting to `Documents\CrimsonFabPublisher\Listings`),
+not in this repository — see [Listings](https://github.com/CarlosAFernandez89/CrimsonFabPublisher/wiki/Listings).
+
 ## Documentation
 
 | | |
@@ -69,13 +91,14 @@ Full walkthrough: [Getting Started](https://github.com/CarlosAFernandez89/Crimso
 | [Target Platforms](https://github.com/CarlosAFernandez89/CrimsonFabPublisher/wiki/Target-Platforms) | Linux / Android toolchain setup and version pinning |
 | [How Change Detection Works](https://github.com/CarlosAFernandez89/CrimsonFabPublisher/wiki/How-Change-Detection-Works) | Hashing, build order, resubmission impact |
 | [Packaging](https://github.com/CarlosAFernandez89/CrimsonFabPublisher/wiki/Packaging) | RunUAT flags, zip naming, exclusions |
+| [Listings](https://github.com/CarlosAFernandez89/CrimsonFabPublisher/wiki/Listings) | Staging listing copy, what re-enters Fab review, Ask Claude |
 | [Troubleshooting](https://github.com/CarlosAFernandez89/CrimsonFabPublisher/wiki/Troubleshooting) | When something says "not detected" |
 
 ## Development
 
 ```bash
 set QT_QPA_PLATFORM=offscreen
-python -m pytest -q          # 145 tests, ~1.5s
+python -m pytest -q          # 421 tests, ~20s
 .\build_exe.ps1              # -> dist\CrimsonFabPublisher.exe
 ```
 

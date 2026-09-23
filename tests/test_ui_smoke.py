@@ -18,7 +18,9 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from fabpublisher import config as config_module  # noqa: E402
 from fabpublisher.models import PluginStatus  # noqa: E402
+from fabpublisher.ui import nav_sidebar  # noqa: E402
 from fabpublisher.ui.log_model import LogLevel  # noqa: E402
+from fabpublisher.ui.nav_sidebar import LOGS  # noqa: E402
 from fabpublisher.ui.theme import apply_theme, icons, stylesheet  # noqa: E402
 
 
@@ -38,6 +40,14 @@ def sandbox(tmp_path: Path, monkeypatch):
     """
     monkeypatch.setattr(config_module, "data_dir", lambda: tmp_path / "appdata")
     (tmp_path / "appdata").mkdir()
+
+    # app_settings imports documents_dir by name, so the binding to redirect is
+    # its own. Without this the suite creates folders in the real Documents.
+    from fabpublisher.ui import app_settings as app_settings_module
+
+    documents = tmp_path / "documents"
+    documents.mkdir()
+    monkeypatch.setattr(app_settings_module, "documents_dir", lambda: documents)
 
     from fabpublisher.models import EngineInfo
     from fabpublisher.ui import main_window as main_window_module
@@ -99,7 +109,7 @@ def test_window_constructs_and_scans(window, suite: Path):
 
 
 def test_every_page_can_be_shown(window):
-    for index in range(4):
+    for index in range(len(nav_sidebar.ITEMS)):
         window._show_page(index)
         assert window.stack.currentIndex() == index
         assert window.nav.current_page() == index
@@ -191,9 +201,9 @@ def test_logs_page_filters_and_exports(window):
 
 def test_error_badge_tracks_the_log(window):
     window.logs.clear()
-    assert window.nav._badges[2].text() == ""
+    assert window.nav._badges[LOGS].text() == ""
     window.logs.append("boom", LogLevel.ERROR)
-    assert window.nav._badges[2].text() == "1"
+    assert window.nav._badges[LOGS].text() == "1"
 
 
 def test_settings_round_trip_through_the_page(window, sandbox: Path):

@@ -26,11 +26,12 @@ WIDTH = 200
 ITEMS: list[tuple[str, str]] = [
     ("plugins", "Plugins"),
     ("build", "Build"),
+    ("listing", "Listings"),
     ("logs", "Logs"),
     ("settings", "Settings"),
 ]
 
-PLUGINS, BUILD, LOGS, SETTINGS = range(4)
+PLUGINS, BUILD, LISTINGS, LOGS, SETTINGS = range(5)
 
 
 class NavSidebar(QWidget):

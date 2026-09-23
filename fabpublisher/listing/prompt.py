@@ -1,0 +1,265 @@
+"""Compose the Ask-Claude prompt, and read its answer back.
+
+The requirements block is generated from `fabrules` rather than written out
+here. That is the point: if the prompt restated Fab's rules in its own words it
+would drift from the validator, and the model would be asked for copy the app
+then rejects.
+
+The template around it is editable, because what makes good listing copy for a
+gameplay framework is not what makes it for an editor tool, and only the
+publisher knows which they are shipping. `{placeholders}` are filled in; the
+prose between them is theirs.
+
+Pure functions only - no subprocess, no Qt. Running the CLI is the UI layer's
+job; this module decides what to say and what came back.
+"""
+
+from __future__ import annotations
+
+import json
+
+from ..models import PluginInfo
+from . import fabrules, schema
+
+#: Exactly what the model must return. Anything else is discarded.
+RESPONSE_SHAPE = {
+    "title": "string",
+    "tags": ["string"],
+    "description": {"what": "string", "how": "string", "technical": "string"},
+}
+
+DRAFTABLE_KEYS = ("title", "tags", "description")
+
+#: Fab's description is structured text, not one prose field and not markdown.
+#: Structure has to be asked for explicitly, with an example, or the model
+#: returns a single unreadable paragraph.
+DEFAULT_TEMPLATE = """You are writing the store listing copy for an Unreal Engine code plugin \
+that is about to be submitted to Fab, Epic's asset marketplace.
+
+## What the plugin is
+
+{facts}
+
+## What Fab requires of the copy
+
+{requirements}
+
+The category will be chosen from: {categories}.
+
+## How the description is laid out
+
+Fab's description is structured text entered as a stack of blocks, not one
+prose field and not markdown. Write copy that maps onto that stack.
+
+Structure every area as a short heading line on its own, then one to three
+short paragraphs, or lines beginning with "- " where a list genuinely reads
+better than prose. Keep paragraphs under about sixty words. A single unbroken
+page of text is the one outcome to avoid - break it up with headings.
+
+Use no markdown at all in the copy you return - no hashes, no asterisks, no
+backticks, no bracketed links. All of those appear literally on the page.
+Headings are plain lines of text; emphasis comes from sentence structure, not
+symbols. (The instructions you are reading use markdown; your answer must not.)
+
+Do not refer to images, screenshots or figures, and never write a placeholder
+for one. Pictures live in the media gallery, which is a separate part of the
+listing - the description is text alone.
+
+An occasional emoji or ASCII mark to head a section is acceptable, but this is
+a professional developer tool: use them sparingly if at all, never more than
+one per section, and never in place of a real heading.
+
+Say what the plugin does for the reader, not what its classes are called.
+
+A well-shaped area looks like this:
+
+Drop-in inventory for any character
+
+Add one component and your character has slots, stacking and weight limits.
+Items are data assets, so designers add new ones without touching C++.
+
+What you get
+- Fragment-based items, so behaviour composes instead of inheriting.
+- Replicated containers with fast array serialisation.
+- A Blueprint API that covers the whole system.
+
+Setting it up
+Add CrimsonInventoryComponent to your pawn, point it at a starting loadout,
+and drive it from Blueprints. No C++ is required to ship with it.
+
+## What you have to work with
+
+{existing}
+
+## Answer format
+
+Reply with a single JSON object and nothing else - no preamble, no code fence,
+no commentary. Its shape is exactly:
+
+{response_shape}
+
+Suggest tags a marketplace picker plausibly already contains - short,
+conventional terms like "inventory", "multiplayer", "blueprint" - not invented
+compounds or your own brand names. Anything Fab does not already know cannot be
+selected, so an exotic tag is a wasted slot.
+
+Write `what` as the pitch a developer skims to decide if this solves their
+problem, `how` as the practical steps to use it in a project, and `technical`
+as prose about prerequisites and integration. The app appends the engine
+version, module list and required-plugin list itself, so do not repeat those.
+"""
+
+#: Placeholders the template may use, for the Settings hint.
+PLACEHOLDERS = ("facts", "requirements", "categories", "existing", "response_shape")
+
+
+def _facts(plugin: PluginInfo, folders: list[str], requirements=None) -> str:
+    modules = ", ".join(f"{m.name} ({m.type})" for m in plugin.modules) or "none"
+    rows = [
+        f"Plugin id: {plugin.name}",
+        f"Friendly name: {plugin.friendly_name or plugin.name}",
+        f"Existing one-line description: {plugin.description or '(none)'}",
+        f"Author's category: {plugin.category or '(none)'}",
+        f"Engine version: {plugin.engine_version or '(unknown)'}",
+        f"Modules: {modules}",
+    ]
+    if requirements is not None:
+        required = ", ".join(requirements.suite + requirements.unknown) or "none"
+        engine = ", ".join(requirements.engine) or "none"
+        rows.append(f"Required plugins the customer must install: {required}")
+        rows.append(f"Engine plugins used: {engine}")
+    rows += [
+        f"Blueprints: {plugin.blueprint_count}",
+        f"C++ classes: {plugin.cpp_class_count}",
+        f"Folders present: {', '.join(folders) or 'none'}",
+        f"Already listed on Fab: {'yes' if plugin.is_live else 'no'}",
+    ]
+    return "\n".join(rows)
+
+
+def _requirements() -> str:
+    """Fab's copy rules, rendered from the one table that records them."""
+    return "\n".join(
+        f"- {rule.text} [{rule.citation}]" for rule in fabrules.rules_for(fabrules.COPY)
+    )
+
+
+def _existing(authored: dict) -> str:
+    kept = {k: v for k, v in authored.items() if k in DRAFTABLE_KEYS and v}
+    if not kept:
+        return "Nothing has been written yet."
+    return (
+        "Already written, and worth keeping unless you can clearly improve it:\n"
+        + json.dumps(kept, indent=2, ensure_ascii=False)
+    )
+
+
+def fill(template: str, values: dict[str, str]) -> str:
+    """Substitute `{name}` placeholders, leaving anything unknown alone.
+
+    Deliberately not `str.format`: an edited template will contain stray braces
+    sooner or later, and a KeyError that loses the user's prompt is a far worse
+    outcome than a placeholder rendering literally.
+    """
+    result = template
+    for name, value in values.items():
+        result = result.replace("{" + name + "}", value)
+    return result
+
+
+def draft_prompt(
+    plugin: PluginInfo,
+    authored: dict | None = None,
+    folders: list[str] | None = None,
+    template: str = "",
+    requirements=None,
+) -> str:
+    """The full prompt sent to the Claude CLI on stdin."""
+    return fill(
+        template or DEFAULT_TEMPLATE,
+        {
+            "facts": _facts(plugin, folders or [], requirements),
+            "requirements": _requirements(),
+            "categories": ", ".join(schema.CATEGORIES),
+            "existing": _existing(authored or {}),
+            "response_shape": json.dumps(RESPONSE_SHAPE, indent=2),
+        },
+    )
+
+
+def improve_prompt(instruction: str) -> str:
+    """A follow-up turn in the same session.
+
+    Sent to a resumed session, so the model still has the original prompt, its
+    own draft and every earlier round of feedback. Only the new instruction and
+    a reminder of the answer format need to travel.
+    """
+    return (
+        f"{instruction.strip()}\n\n"
+        "Reply with the same JSON object shape as before and nothing else - no "
+        "preamble, no code fence, no commentary. Include every field, not only "
+        "the ones you changed."
+    )
+
+
+def extract_json_block(text: str) -> dict | None:
+    """The first balanced JSON object in a reply, or None.
+
+    Models wrap JSON in prose and fences however they like, so brace-matching
+    the first complete object is more reliable than trusting the whole reply to
+    parse. Returning None lets the caller keep the raw text rather than lose it.
+    """
+    start = text.find("{")
+    while start != -1:
+        depth = 0
+        in_string = False
+        escaped = False
+        for index in range(start, len(text)):
+            char = text[index]
+            if in_string:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == '"':
+                    in_string = False
+                continue
+            if char == '"':
+                in_string = True
+            elif char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    try:
+                        parsed = json.loads(text[start : index + 1])
+                    except ValueError:
+                        break
+                    if isinstance(parsed, dict):
+                        return parsed
+                    break
+        start = text.find("{", start + 1)
+    return None
+
+
+def merge_draft(authored: dict, draft: dict, overwrite: bool = False) -> dict:
+    """Fold a draft into the authored file without clobbering your own words.
+
+    By default only keys you have not written are taken, so re-running the
+    drafter is safe. `overwrite` is the explicit "replace what I wrote" path,
+    and is what a follow-up round uses - you asked for the change.
+    """
+    merged = dict(authored)
+    for key in DRAFTABLE_KEYS:
+        if key not in draft:
+            continue
+        value = draft[key]
+        if key == "description" and isinstance(value, dict):
+            existing = dict(merged.get("description") or {})
+            for block in schema.DESCRIPTION_BLOCKS:
+                if block in value and (overwrite or not existing.get(block)):
+                    existing[block] = value[block]
+            merged["description"] = existing
+        elif overwrite or not merged.get(key):
+            merged[key] = value
+    return merged

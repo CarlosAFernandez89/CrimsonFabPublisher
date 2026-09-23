@@ -118,7 +118,9 @@ def preflight(
     warnings: list[Issue] = []
     for job in jobs:
         for issue in (issues or {}).get(job.name, ()):
-            warnings.append(Issue(issue.level, f"{job.name}: {issue.message}"))
+            warnings.append(
+                Issue(issue.level, f"{job.name}: {issue.message}", issue.key)
+            )
     return Preflight(blockers=blockers, warnings=warnings)
 
 

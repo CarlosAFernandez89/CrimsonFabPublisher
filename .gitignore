@@ -52,3 +52,12 @@ $RECYCLE.BIN/
 *.log
 config.json
 state.json
+
+# --- Listing workspace ----------------------------------------------------
+# A listings folder holds one publisher's own copy, media and submission
+# snapshots. It belongs in that publisher's repository, never in this tool's:
+# anyone who clones this is publishing their own plugins, not reading ours.
+# The path is configured in Settings; this only catches one pointed here.
+listings/
+# Generated bundles, wherever the output folder happens to be.
+_Listings/

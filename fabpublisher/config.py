@@ -15,6 +15,31 @@ def data_dir() -> Path:
     return Path(base) / APP_NAME
 
 
+def documents_dir() -> Path:
+    """The user's Documents folder, honouring redirection.
+
+    Plenty of Windows installs point Documents at OneDrive, and a localized
+    Windows does not call it "Documents" at all, so `~/Documents` is a guess
+    that silently creates a second, wrong folder. The registry holds the real
+    one; fall back to the guess only when it cannot be read.
+    """
+    try:
+        import winreg
+
+        key = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders",
+        )
+        with key:
+            value, _ = winreg.QueryValueEx(key, "Personal")
+        expanded = Path(os.path.expandvars(value))
+        if expanded.is_dir():
+            return expanded
+    except (ImportError, OSError, ValueError):
+        pass
+    return Path.home() / "Documents"
+
+
 def config_path() -> Path:
     return data_dir() / "config.json"
 
@@ -39,6 +64,19 @@ class Config:
     #: Engine roots the user registered by hand, for installs the Epic Launcher
     #: never recorded. Merged with automatic detection.
     custom_engine_roots: list[str] = field(default_factory=list)
+    #: Where authored listing copy, media and submission snapshots live. Empty
+    #: until the user picks one; it belongs under version control, so the app
+    #: never invents a location for it.
+    listings_dir: str = ""
+    #: Claude CLI used to draft listing copy. Resolved on PATH when blank.
+    claude_path: str = ""
+    #: The drafting prompt. Empty means the built-in one; edit it to steer
+    #: the copy toward the kind of product being published.
+    listing_prompt_template: str = ""
+    #: Fab documents neither FAQ nor changelog edits, so both are treated as
+    #: review-triggering until observed otherwise. One flip each.
+    listing_faq_review: bool = True
+    listing_changelog_review: bool = True
 
     @classmethod
     def load(cls) -> "Config":

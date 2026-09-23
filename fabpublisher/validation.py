@@ -14,6 +14,9 @@ MAX_SUBMISSION_BYTES = 15 * 1024 * 1024 * 1024  # 15 GB FAB limit
 class Issue:
     level: str  # "error" | "warning"
     message: str
+    #: The listing key, descriptor key or requirement section that fixes this.
+    #: Empty for issues that are not tied to one editable field.
+    key: str = ""
 
 
 def _engine_major_minor(version: str) -> tuple[str, ...]:

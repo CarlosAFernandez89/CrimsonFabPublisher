@@ -1,7 +1,7 @@
 """Application shell.
 
-Owns four things — settings, scan service, build controller, log model — wires
-them to the pages, and computes nothing itself.
+Owns five things — settings, scan service, build controller, listing
+controller, log model — wires them to the pages, and computes nothing itself.
 """
 
 from __future__ import annotations
@@ -30,9 +30,11 @@ from ..scan_service import ScanService
 from ..state import StateStore
 from .app_settings import AppSettings
 from .build_controller import BuildController, BuildRequest, preflight
+from .listing_controller import ListingController
 from .log_model import LogLevel, LogModel, level_from_issue
 from .nav_sidebar import BUILD, LOGS, SETTINGS, NavSidebar
 from .pages.build_page import BuildPage
+from .pages.listings_page import ListingsPage
 from .pages.logs_page import LogsPage
 from .pages.plugins_page import PluginsPage
 from .pages.settings_page import SettingsPage
@@ -59,17 +61,20 @@ class MainWindow(QMainWindow):
         self.store = StateStore(state_path())
         self.scanner = ScanService(self.store)
         self.build = BuildController(self.store, self)
+        self.listings = ListingController(self)
         self.model = PluginTableModel(self)
 
         self._current_hashes: dict[str, str] = {}
         self._issues: dict[str, list] = {}
         self._selection_restored = False
+        self._listing_scan = None
         self._last_summary = ""
 
         self._build_ui()
         self._connect()
         # _build_ui may have landed on a different engine than the saved one.
         self._refresh_platform_info()
+        self._configure_listings()
         self._restore_geometry()
         self.rescan()
 
@@ -91,11 +96,14 @@ class MainWindow(QMainWindow):
         self.stack = QStackedWidget()
         self.plugins_page = PluginsPage(self.settings, self.model)
         self.build_page = BuildPage(self.settings, self.engines, self.platform_info)
+        self.listings_page = ListingsPage()
         self.logs_page = LogsPage(self.logs)
         self.settings_page = SettingsPage(self.settings)
+        # Order must match nav_sidebar.ITEMS: the two are coupled positionally.
         for page in (
             self.plugins_page,
             self.build_page,
+            self.listings_page,
             self.logs_page,
             self.settings_page,
         ):
@@ -130,7 +138,28 @@ class MainWindow(QMainWindow):
         self.build_page.platforms_changed.connect(self._refresh_build_page)
         self.build_page.platforms_unavailable.connect(self._on_platforms_unavailable)
 
+        self.listings_page.check_requested.connect(self._check_listings)
+        self.listings_page.build_requested.connect(self._build_listings)
+        self.listings_page.accept_requested.connect(self._accept_listings)
+        self.listings_page.cancel_requested.connect(self.listings.cancel)
+        self.listings_page.draft_requested.connect(self._draft_listing)
+        self.listings_page.improve_requested.connect(self._improve_listing)
+        self.listings_page.copy_prompt_requested.connect(self._copy_listing_prompt)
+        self.listings_page.open_bundle_requested.connect(self._open_bundle)
+        self.listings_page.open_settings_requested.connect(
+            lambda: self._show_page(SETTINGS)
+        )
+        self.listings_page.editor.saved.connect(lambda _: self._recheck_listings())
+
+        self.listings.records.connect(self.logs.extend)
+        self.listings.check_finished.connect(self._on_listing_scan)
+        self.listings.busy_changed.connect(self.listings_page.set_busy)
+        self.listings.draft_started.connect(self.listings_page.begin_draft)
+        self.listings.draft_line.connect(self.listings_page.append_draft_line)
+        self.listings.draft_finished.connect(self._on_draft_finished)
+
         self.settings_page.plugins_root_changed.connect(self.rescan)
+        self.settings_page.listings_dir_changed.connect(self._configure_listings)
         self.settings_page.build_history_reset.connect(self._reset_history)
         self.settings_page.engine_roots_changed.connect(self._reload_engines)
 
@@ -269,6 +298,154 @@ class MainWindow(QMainWindow):
         self._log("Build history reset — everything reads as changed.", LogLevel.WARNING)
         self.rescan()
 
+    # --------------------------------------------------------------- listings
+    def _configure_listings(self, *_args) -> None:
+        """Point the listing layer at its folder, creating it if need be.
+
+        There is always a folder — Documents by default — so the page never
+        opens on a dead end. Creation failing is the only case the page has to
+        report, and it says which path it could not use.
+        """
+        folder = self.settings.effective_listings_dir()
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            self._log(f"Cannot use the listings folder {folder}: {exc}", LogLevel.WARNING)
+            self.listings_page.set_listings_dir(None)
+            return
+        self.listings.configure(
+            str(folder),
+            self.settings.effective_output_dir(),
+            self.settings.listing_faq_review,
+            self.settings.listing_changelog_review,
+        )
+        self.listings.prompt_template = self.settings.listing_prompt_template
+        self.listings_page.set_listings_dir(folder)
+
+    def _check_listings(self, scope: str) -> None:
+        rows = self.listings_page.rows_for_scope(scope)
+        plugins = [r.plugin for r in rows] if rows else self.model.plugins()
+        if not plugins:
+            self._log("Nothing to check — scan for plugins first.", LogLevel.WARNING)
+            return
+        self.listings.check(
+            plugins,
+            self._selected_engine(),
+            [platform_uat_name(p) for p in self.platform_info
+             if p in self.settings.platforms],
+        )
+
+    def _recheck_listings(self) -> None:
+        """After an edit, re-run over whatever is on screen."""
+        self._check_listings(self.listings_page.scope.currentText())
+
+    def _on_listing_scan(self, scan) -> None:
+        self._listing_scan = scan
+        if scan.error:
+            self.listings_page.set_listings_dir(None)
+            return
+        self.listings_page.set_scan(scan)
+
+    def _build_listings(self) -> None:
+        if self._listing_scan is None:
+            self._log("Run Check first.", LogLevel.WARNING)
+            return
+        written = self.listings.build(self._listing_scan)
+        if written and self.settings.auto_open_output:
+            self._open_folder(written[0])
+
+    def _accept_listings(self, force: bool) -> None:
+        rows = self.listings_page.selected_rows() or (
+            list(self._listing_scan.publishable) if self._listing_scan else []
+        )
+        rows = [r for r in rows if r.publishable]
+        if not rows:
+            self._log("Select a listing to accept.", LogLevel.WARNING)
+            return
+
+        blocked = [r for r in rows if r.blocked]
+        if blocked and not force:
+            names = ", ".join(r.plugin_id for r in blocked[:5])
+            box = QMessageBox(self)
+            box.setWindowTitle("Accept with errors?")
+            box.setText(
+                f"{len(blocked)} listing(s) still have errors: {names}.\n\n"
+                f"A snapshot of copy Fab would reject becomes the baseline every "
+                f"later diff is measured against."
+            )
+            fix = box.addButton("Fix them first", QMessageBox.RejectRole)
+            box.addButton("Accept anyway", QMessageBox.DestructiveRole)
+            box.setDefaultButton(fix)  # never default to the destructive path
+            box.exec()
+            if box.clickedButton() is fix:
+                return
+
+        result = self.listings.accept(rows, force=True)
+        self._log(
+            f"Accepted {len(result.accepted)} listing(s), "
+            f"{result.fields_recorded} field(s) recorded."
+        )
+        self._recheck_listings()
+
+    def _selected_listing_row(self):
+        rows = self.listings_page.selected_rows()
+        return rows[0] if rows else None
+
+    def _draft_listing(self, _plugin_id: str) -> None:
+        row = self._selected_listing_row()
+        if row is None:
+            return
+        error = self.listings.start_draft(row, self.settings.claude_path)
+        if error:
+            self._log(error, LogLevel.WARNING)
+            self.listings_page.copy_prompt(self.listings.draft_prompt_for(row))
+
+    def _improve_listing(self, _plugin_id: str, instruction: str) -> None:
+        row = self._selected_listing_row()
+        if row is None:
+            return
+        error = self.listings.start_draft(
+            row, self.settings.claude_path, instruction=instruction
+        )
+        if error:
+            self._log(error, LogLevel.WARNING)
+
+    def _copy_listing_prompt(self, _plugin_id: str) -> None:
+        row = self._selected_listing_row()
+        if row is not None:
+            self.listings_page.copy_prompt(self.listings.draft_prompt_for(row))
+
+    def _on_draft_finished(self, plugin_id: str, output: str, error: str) -> None:
+        row = self._selected_listing_row()
+        message = error
+        if not error and row is not None and row.plugin_id == plugin_id:
+            message = (
+                self.listings.apply_draft(
+                    row, output, overwrite=self.listings.draft_overwrites
+                )
+                or "Draft applied."
+            )
+            if message == "Draft applied.":
+                self._recheck_listings()
+            else:
+                self._log(message, LogLevel.WARNING)
+        self.listings_page.end_draft(message)
+
+    def _open_bundle(self, plugin_id: str) -> None:
+        from ..listing.render import bundle_dir
+
+        folder = bundle_dir(self.settings.effective_output_dir(), plugin_id)
+        if folder.is_dir():
+            self._open_folder(folder)
+        else:
+            self._log(
+                f"No bundle for {plugin_id} yet — run Build bundles.",
+                LogLevel.WARNING,
+            )
+
+    def _open_folder(self, path: Path) -> None:
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+
     # ------------------------------------------------------------------ build
     def _jobs(self, names: set[str]) -> list[PluginInfo]:
         """Checked plugins plus their transitive suite deps, in build order."""
@@ -383,6 +560,9 @@ class MainWindow(QMainWindow):
         # Destroying a running QThread aborts the process, so the build has to
         # stop before the window can go away.
         if self.build.is_running and not self.build.shutdown():
+            event.ignore()
+            return
+        if not self.listings.shutdown():
             event.ignore()
             return
         self._save_settings()

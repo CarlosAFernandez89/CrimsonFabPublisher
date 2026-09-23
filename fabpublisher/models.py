@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import enum
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -66,11 +67,21 @@ class PluginStatus(enum.Enum):
     FAILED = "failed"
 
 
+#: A Fab product id: the UUID at the end of a listing URL.
+_PRODUCT_ID = re.compile(
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+)
+
+
 @dataclass
 class ModuleInfo:
     name: str
     type: str
     loading_phase: str
+    #: Fab technical requirements 4.3.6.b: every module must declare one of
+    #: these. UE4 spelled them WhitelistPlatforms / BlacklistPlatforms.
+    platform_allow_list: list[str] = field(default_factory=list)
+    platform_deny_list: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -90,6 +101,19 @@ class PluginInfo:
     can_contain_content: bool = False
     modules: list[ModuleInfo] = field(default_factory=list)
     dependency_names: list[str] = field(default_factory=list)
+    # Descriptor metadata the Fab listing form and its technical requirements
+    # need. Absent from a descriptor simply means "not set".
+    description: str = ""
+    category: str = ""
+    created_by: str = ""
+    created_by_url: str = ""
+    docs_url: str = ""
+    support_url: str = ""
+    #: 4.3.6.c names FabURL as the required key. The suite still writes the
+    #: UE-era MarketplaceURL, so both are read and FabURL wins.
+    fab_url: str = ""
+    marketplace_url: str = ""
+    supported_target_platforms: list[str] = field(default_factory=list)
     # Populated after classification / analysis:
     dependencies: list[Dependency] = field(default_factory=list)
     #: Fab submission-form counts, filled in by the scan.
@@ -101,6 +125,27 @@ class PluginInfo:
     @property
     def suite_dependency_names(self) -> list[str]:
         return [d.name for d in self.dependencies if d.kind == DependencyKind.SUITE]
+
+    @property
+    def listing_url(self) -> str:
+        """The plugin's Fab product URL, whichever key carries it."""
+        return self.fab_url or self.marketplace_url
+
+    @property
+    def is_live(self) -> bool:
+        """True when a Fab listing already exists — update it, never re-create."""
+        return bool(self.listing_url)
+
+    @property
+    def fab_product_id(self) -> str:
+        """The product UUID trailing the listing URL, or "" if there is none.
+
+        Fab writes the launcher scheme
+        (`com.epicgames.launcher://ue/Fab/product/<uuid>`) as well as plain
+        https, so match the UUID itself rather than parsing the scheme.
+        """
+        match = _PRODUCT_ID.search(self.listing_url)
+        return match.group(0) if match else ""
 
 
 @dataclass

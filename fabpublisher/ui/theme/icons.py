@@ -1,6 +1,6 @@
 """Icons drawn with QPainter.
 
-Six glyphs do not justify shipping SVG files: that would mean an assets folder,
+A handful of glyphs do not justify shipping SVG files: that would mean an assets folder,
 another PyInstaller data entry, and a dependency on the qsvg imageformats plugin
 being bundled correctly — which fails silently in the frozen exe. Drawing them
 also means they recolour from tokens for free.
@@ -98,11 +98,24 @@ def _cancel(p: QPainter, c: str, s: int) -> None:
     p.drawRoundedRect(QRectF(s * 0.27, s * 0.27, s * 0.46, s * 0.46), 2, 2)
 
 
+def _listing(p: QPainter, c: str, s: int) -> None:
+    """A framed page with lines - a document, not the bare lines of _logs."""
+    pen = QPen(QColor(c))
+    pen.setWidthF(max(1.0, s * 0.075))
+    p.setPen(pen)
+    p.setBrush(Qt.NoBrush)
+    p.drawRoundedRect(QRectF(s * 0.22, s * 0.14, s * 0.56, s * 0.72), 2, 2)
+    for i in range(3):
+        y = s * (0.32 + i * 0.16)
+        p.drawLine(QPointF(s * 0.34, y), QPointF(s * 0.66, y))
+
+
 _SHAPES = {
     "plugins": _plugins,
     "build": _build,
     "logs": _logs,
     "settings": _settings,
+    "listing": _listing,
     "rescan": _rescan,
     "cancel": _cancel,
 }

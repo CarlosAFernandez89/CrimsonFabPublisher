@@ -11,11 +11,16 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal
 
-from ..config import Config, data_dir
+from ..config import APP_NAME, Config, data_dir, documents_dir
 from ..models import Platform
 
 #: Folder name used when the user has not chosen an output location.
 SUBMISSIONS_DIRNAME = "FabSubmissions"
+
+#: Where listing copy goes by default. Under Documents rather than %APPDATA%
+#: because this is authored content the user is expected to find, edit and
+#: back up - not app state they should never have to look at.
+LISTINGS_DIRNAME = "Listings"
 
 
 def default_output_dir() -> Path:
@@ -27,6 +32,17 @@ def default_output_dir() -> Path:
     app, on the system drive.
     """
     return data_dir() / SUBMISSIONS_DIRNAME
+
+
+def default_listings_dir() -> Path:
+    """Where listing copy goes when the user has not chosen a folder.
+
+    Documents, not %APPDATA%: these are files you open, edit and want backed
+    up. Keeping them out of the app's own install tree also matters - anyone
+    who clones this tool is publishing their own plugins, and their copy must
+    never end up in its repository.
+    """
+    return documents_dir() / APP_NAME / LISTINGS_DIRNAME
 
 
 def platform_from_mask(value: object) -> Platform:
@@ -55,6 +71,8 @@ class AppSettings(QObject):
     auto_open_output_changed = Signal(bool)
     auto_select_changed_toggled = Signal(bool)
     custom_engine_roots_changed = Signal(list)
+    listings_dir_changed = Signal(str)
+    claude_path_changed = Signal(str)
 
     def __init__(self, config: Config | None = None, parent: QObject | None = None):
         super().__init__(parent)
@@ -100,6 +118,59 @@ class AppSettings(QObject):
         if self._c.output_dir:
             return Path(self._c.output_dir)
         return default_output_dir()
+
+    # --------------------------------------------------------------- listings
+    @property
+    def listings_dir(self) -> str:
+        return self._c.listings_dir
+
+    @listings_dir.setter
+    def listings_dir(self, value: str) -> None:
+        value = value.strip()
+        if value != self._c.listings_dir:
+            self._c.listings_dir = value
+            self.listings_dir_changed.emit(value)
+
+    def effective_listings_dir(self) -> Path:
+        """Where authored listing copy lives, chosen or defaulted."""
+        if self._c.listings_dir:
+            return Path(self._c.listings_dir)
+        return default_listings_dir()
+
+    @property
+    def claude_path(self) -> str:
+        return self._c.claude_path
+
+    @claude_path.setter
+    def claude_path(self, value: str) -> None:
+        value = value.strip()
+        if value != self._c.claude_path:
+            self._c.claude_path = value
+            self.claude_path_changed.emit(value)
+
+    @property
+    def listing_prompt_template(self) -> str:
+        return self._c.listing_prompt_template
+
+    @listing_prompt_template.setter
+    def listing_prompt_template(self, value: str) -> None:
+        self._c.listing_prompt_template = value
+
+    @property
+    def listing_faq_review(self) -> bool:
+        return self._c.listing_faq_review
+
+    @listing_faq_review.setter
+    def listing_faq_review(self, value: bool) -> None:
+        self._c.listing_faq_review = bool(value)
+
+    @property
+    def listing_changelog_review(self) -> bool:
+        return self._c.listing_changelog_review
+
+    @listing_changelog_review.setter
+    def listing_changelog_review(self, value: bool) -> None:
+        self._c.listing_changelog_review = bool(value)
 
     # ----------------------------------------------------------------- engine
     @property

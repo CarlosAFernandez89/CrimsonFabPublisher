@@ -8,6 +8,13 @@ from pathlib import Path
 from .models import ModuleInfo, PluginInfo
 
 
+def _strings(value: object) -> list[str]:
+    """Read a descriptor list of strings, tolerating any other shape."""
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str)]
+
+
 def parse_uplugin(uplugin_path: Path) -> PluginInfo:
     """Read a `.uplugin` file into a PluginInfo.
 
@@ -22,6 +29,14 @@ def parse_uplugin(uplugin_path: Path) -> PluginInfo:
             name=m.get("Name", ""),
             type=m.get("Type", ""),
             loading_phase=m.get("LoadingPhase", ""),
+            # UE4 spelled these WhitelistPlatforms / BlacklistPlatforms; read
+            # both so a 4.x descriptor still reports its platform list.
+            platform_allow_list=_strings(
+                m.get("PlatformAllowList", m.get("WhitelistPlatforms"))
+            ),
+            platform_deny_list=_strings(
+                m.get("PlatformDenyList", m.get("BlacklistPlatforms"))
+            ),
         )
         for m in data.get("Modules", [])
     ]
@@ -40,4 +55,13 @@ def parse_uplugin(uplugin_path: Path) -> PluginInfo:
         can_contain_content=bool(data.get("CanContainContent", False)),
         modules=modules,
         dependency_names=dependency_names,
+        description=data.get("Description", ""),
+        category=data.get("Category", ""),
+        created_by=data.get("CreatedBy", ""),
+        created_by_url=data.get("CreatedByURL", ""),
+        docs_url=data.get("DocsURL", ""),
+        support_url=data.get("SupportURL", ""),
+        fab_url=data.get("FabURL", ""),
+        marketplace_url=data.get("MarketplaceURL", ""),
+        supported_target_platforms=_strings(data.get("SupportedTargetPlatforms")),
     )

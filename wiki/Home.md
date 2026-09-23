@@ -18,20 +18,22 @@ in, and — crucially — **which ones actually changed since you last shipped t
 | **Tracks impact** | Change one plugin and everything downstream is flagged for resubmission |
 | **Builds** | Drives `RunUAT BuildPlugin` with the same flags as the original batch script |
 | **Packages** | Produces `<Plugin>_UE_<version>_Submission.zip`, stripped of build artifacts |
+| **Stages listings** | Writes the paste-ready listing copy, checks it against Fab's requirements, and diffs it against your last submission |
 
 ## What it does *not* do
 
 It does not upload anything. Despite the name, there is no Fab API integration, no
 authentication, and no network access at all — `QtNetwork` is excluded from the build. The
-final step is manual: the app opens the output folder and you drag the zips into the Fab
-seller portal.
+final step is manual: the app opens the output folder, and you drag the zips into the Fab
+seller portal and paste the listing text into the form yourself.
 
 ## Getting started
 
 1. **[Installation](Installation)** — grab the exe or run from source
 2. **[Getting Started](Getting-Started)** — your first scan and build
 3. **[Target Platforms](Target-Platforms)** — enabling Linux, Android, Mac and iOS
-4. **[Troubleshooting](Troubleshooting)** — when something says "not detected"
+4. **[Listings](Listings)** — staging the listing page, not just the zip
+5. **[Troubleshooting](Troubleshooting)** — when something says "not detected"
 
 ## Where your data lives
 
@@ -41,3 +43,7 @@ Nothing is written to the registry. Two files under `%APPDATA%\CrimsonFabPublish
 - `state.json` — the build-history hashes that power change detection
 
 Both are reachable from **Settings › Data**, along with a *Reset build history* action.
+
+Listing copy is yours, not app state, so it lives somewhere you can find and back up —
+`Documents\CrimsonFabPublisher\Listings\` by default, changeable in **Settings › Fab
+listings**. See [Listings](Listings).
