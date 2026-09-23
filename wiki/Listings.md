@@ -86,9 +86,8 @@ written in a small markup: `## ` headings, `- ` bullets, `**bold**` and
 anything outside that set.
 
 **Copy description** — puts the built description on the clipboard as
-formatted text, with a plain-text fallback, so pasting into Fab's description
-field keeps the headings, bullets and bold. It copies what the last Check
-composed.
+formatted text, with a plain-text fallback, ready to paste into Fab's
+description field. It copies what the last Check composed.
 
 ## The one rule
 
