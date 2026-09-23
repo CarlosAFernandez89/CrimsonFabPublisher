@@ -173,16 +173,18 @@ RULES: tuple[Rule, ...] = (
     ),
     Rule(
         "plain-prose",
-        "The description is not rendered as markdown. Write plain prose and "
-        "plain bullet lines; backticks, asterisks and link syntax appear "
-        "literally on the page.",
+        "The description is rich text, but markdown source is not rendered: "
+        "pasted asterisks and backticks appear literally. Use only the app's "
+        "description markup - '## ' headings, '- ' bullets, **bold** and "
+        "[text](https://...) links - which the app converts to Fab's "
+        "formatting when the description is copied.",
         COPY,
         confidence=OBSERVED,
     ),
     Rule(
         "block-structure",
         "The description is entered as structured text blocks, so it must be "
-        "written as short headed sections rather than one continuous "
+        "written as short sections under headings rather than one continuous "
         "paragraph. Pictures belong to the media gallery, not the description.",
         COPY,
         confidence=OBSERVED,

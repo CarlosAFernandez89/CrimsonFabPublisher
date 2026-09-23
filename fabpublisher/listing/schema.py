@@ -150,6 +150,7 @@ IGNORED: frozenset[str] = frozenset(
         "fab",
         "description.chars",
         "description.blocks",
+        "description.ranges",
         "media.missing",
         "media.gallery_bytes",
         "media.gallery_count",

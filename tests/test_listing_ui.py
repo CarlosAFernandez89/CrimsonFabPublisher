@@ -377,6 +377,23 @@ def test_audit_findings_can_be_copied(staged):
     assert any(line.startswith(("ERROR", "WARNING")) for line in text.splitlines())
 
 
+def test_the_description_is_copied_rich_and_plain(staged):
+    """Fab's editor keeps the HTML; anything else gets text without markup."""
+    win, _ = staged
+    run_check(win)
+    win.listings_page.table.selectRow(0)
+
+    win.listings_page.editor.copy_description_button.click()
+
+    from PySide6.QtGui import QGuiApplication
+
+    mime = QGuiApplication.clipboard().mimeData()
+    assert mime.hasHtml()
+    assert "<p>" in mime.html()
+    assert mime.text()
+    assert "**" not in mime.text()
+
+
 def test_copying_nothing_leaves_the_clipboard_alone(qapp):  # noqa: F811
     from fabpublisher.ui.diff_view import IssueList
 

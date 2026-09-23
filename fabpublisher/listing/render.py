@@ -18,6 +18,7 @@ import shutil
 import time
 from pathlib import Path
 
+from . import markup
 from .diffing import CLEAN, NEW, PENDING, DiffReport
 from .source import write_json
 
@@ -39,14 +40,25 @@ def bundle_dir(output_dir: Path, plugin_id: str) -> Path:
 
 def _blocks(listing: dict) -> dict[str, str]:
     """The description split back into its three areas for per-block pasting."""
-    text = str((listing.get("description") or {}).get("text") or "")
-    names = list((listing.get("description") or {}).get("blocks") or [])
-    parts = text.split("\n\n") if text else []
-    return dict(zip(names, parts))
+    description = listing.get("description") or {}
+    text = str(description.get("text") or "")
+    names = list(description.get("blocks") or [])
+    ranges = list(description.get("ranges") or [])
+    return {name: text[start:end] for name, (start, end) in zip(names, ranges)}
 
 
 def _description_text(listing: dict) -> str:
     return str((listing.get("description") or {}).get("text") or "")
+
+
+def _description_html(listing: dict) -> str:
+    """A page to open in a browser and copy from, formatting and all."""
+    return (
+        '<!DOCTYPE html>\n<html><head><meta charset="utf-8">'
+        "<title>Description</title></head>\n<body>\n"
+        + markup.to_html(_description_text(listing))
+        + "\n</body></html>\n"
+    )
 
 
 #: Tags come out of Fab's own picker, so the generated list is a set of
@@ -227,8 +239,9 @@ def _checklist_markdown(listing: dict, report: DiffReport) -> str:
         f"- [ ] Category - {listing.get('category', '')}",
 
         "- [ ] License and price - see `listing.md`",
-        "- [ ] Description - paste `description.txt`, keeping its headings and "
-        "paragraph breaks",
+        "- [ ] Description - press *Copy description* in the app (or open "
+        "`description.html` in a browser and copy it), then paste, so the "
+        "headings, bullets and bold arrive formatted",
         "- [ ] Tags - search each line of `tags.txt` in the picker; delete any "
         "it does not offer from the listing file too",
         "- [ ] Thumbnail - `media/01-thumbnail.*`",
@@ -290,7 +303,8 @@ def write_bundle(
     blocks = _blocks(listing)
     files = {
         "listing.md": _listing_markdown(listing),
-        "description.txt": _description_text(listing) + "\n",
+        "description.txt": markup.to_plain(_description_text(listing)) + "\n",
+        "description.html": _description_html(listing),
         "tags.txt": _tags_text(listing) + "\n",
         "technical.txt": _technical_text(listing) + "\n",
         "faq.md": _faq_markdown(listing),

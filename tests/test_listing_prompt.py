@@ -64,15 +64,30 @@ def test_prompt_names_the_prerequisites_when_they_are_known(plugin):
     assert "Engine plugins used: GameplayAbilities" in text
 
 
-def test_prompt_demands_structure_not_a_wall_of_text(plugin):
+def test_prompt_lays_out_the_crimson_template(plugin):
     text = draft_prompt(plugin)
 
-    assert "structured text" in text
-    assert "heading line" in text
-    assert "the one outcome to avoid" in text
-    assert "no markdown" in text.lower()
+    for section in ("✨ Features", "🛠️ Getting Started", "📋 Requirements", "⚠️ Limitations"):
+        assert section in text
+    assert "Fab collapses the description" in text
     # An example is the instruction that actually lands.
-    assert "A well-shaped area looks like this:" in text
+    assert "--- example start ---" in text
+
+
+def test_prompt_teaches_only_the_supported_markup(plugin):
+    text = draft_prompt(plugin)
+
+    assert 'A line starting "## " is a section heading.' in text
+    assert "No other markup: no backticks" in text
+
+
+def test_prompt_offers_only_known_urls_for_the_link_bar(plugin):
+    plugin.docs_url = "https://docs.example.com"
+    text = draft_prompt(plugin)
+
+    assert "Documentation URL: https://docs.example.com" in text
+    assert "Support URL: (none)" in text
+    assert "never invent one" in text
 
 
 def test_prompt_keeps_pictures_out_of_the_description(plugin):

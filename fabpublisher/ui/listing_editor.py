@@ -14,7 +14,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QMimeData, Qt, Signal
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -34,7 +35,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..listing import fabrules, schema, source
+from ..listing import fabrules, markup, schema, source
 from ..listing.service import ListingRow
 from .cards import card
 from .diff_view import DiffView, IssueList
@@ -153,6 +154,13 @@ class ListingEditor(QTabWidget):
         ask_row.addWidget(self.improve_button)
         ask_row.addWidget(self.copy_prompt_button)
         ask_row.addStretch(1)
+        self.copy_description_button = QPushButton("Copy description")
+        self.copy_description_button.setToolTip(
+            "Copies the built description with its headings, bullets and bold, "
+            "ready to paste into Fab's description field. Reflects the last Check."
+        )
+        self.copy_description_button.clicked.connect(self._copy_description)
+        ask_row.addWidget(self.copy_description_button)
         box.addLayout(ask_row)
         layout.addWidget(frame)
 
@@ -544,3 +552,17 @@ class ListingEditor(QTabWidget):
     def _copy_prompt(self) -> None:
         if self._row is not None:
             self.copy_prompt_requested.emit(self._row.plugin_id)
+
+    def _copy_description(self) -> None:
+        """The composed description, formatted for Fab's editor.
+
+        Both flavours go on the clipboard: rich editors take the HTML, and
+        anything else still gets clean text rather than markup.
+        """
+        if self._row is None:
+            return
+        text = str(((self._row.listing or {}).get("description") or {}).get("text") or "")
+        mime = QMimeData()
+        mime.setHtml(markup.to_html(text))
+        mime.setText(markup.to_plain(text))
+        QGuiApplication.clipboard().setMimeData(mime)

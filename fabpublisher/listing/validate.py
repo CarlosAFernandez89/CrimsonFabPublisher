@@ -13,10 +13,7 @@ from __future__ import annotations
 import re
 
 from ..validation import Issue
-from . import fabrules, schema
-
-#: Markdown constructs Fab renders literally, so they read as noise on the page.
-_RESIDUAL_MARKDOWN = (("`", "backticks"), ("**", "bold markers"), ("](", "link syntax"))
+from . import fabrules, markup, schema
 
 #: A camelCase run, i.e. the raw plugin id leaked past the title derivation.
 _CAMEL_RUN = re.compile(r"[a-z][A-Z]")
@@ -104,13 +101,13 @@ def _check_description(listing: dict) -> list[Issue]:
             )
         )
 
-    found = [name for token, name in _RESIDUAL_MARKDOWN if token in text]
+    found = markup.problems(text)
     if found:
         issues.append(
             _warn(
                 f"Description contains {', '.join(found)}, which Fab shows "
-                f"literally ({fabrules.cite('plain-prose')}). Rewrite as plain "
-                f"prose.",
+                f"literally ({fabrules.cite('plain-prose')}). Use only ## "
+                f"headings, - bullets, **bold** and [text](https://...) links.",
                 "description",
             )
         )

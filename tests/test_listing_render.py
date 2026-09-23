@@ -96,6 +96,7 @@ def test_bundle_writes_every_artifact(service, tmp_path):
     assert {
         "listing.md",
         "description.txt",
+        "description.html",
         "tags.txt",
         "technical.txt",
         "faq.md",
@@ -156,6 +157,22 @@ def test_a_live_listing_says_update_do_not_create(tmp_path, listings):
     out = write_bundle(listing, DiffReport(CLEAN), tmp_path / "b", listings / "media")
 
     assert "update it, do not create" in (out / "checklist.md").read_text("utf-8")
+
+
+def test_the_how_block_is_written_whole_despite_its_paragraphs(tmp_path, listings):
+    """Splitting the text on blank lines used to cut blocks at their first paragraph."""
+    listing = copy.deepcopy(BASE)
+    what, how = "Pitch.\n\nMore pitch.", "## Getting Started\n\n- Step one."
+    listing["description"] = {
+        "text": f"{what}\n\n{how}",
+        "chars": len(what) + 2 + len(how),
+        "blocks": ["what", "how"],
+        "ranges": [[0, len(what)], [len(what) + 2, len(what) + 2 + len(how)]],
+    }
+
+    out = write_bundle(listing, DiffReport(NEW), tmp_path / "b", listings / "media")
+
+    assert (out / "description-how.txt").read_text("utf-8") == how
 
 
 def test_a_new_listing_says_create_it(tmp_path, listings):

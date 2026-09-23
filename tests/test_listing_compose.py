@@ -234,6 +234,21 @@ def test_description_blocks_record_which_areas_are_present(plugins, listings):
     assert listing["description"]["chars"] == len(listing["description"]["text"])
 
 
+def test_description_ranges_recover_each_block_with_its_paragraphs(plugins, listings):
+    how = "## 🛠️ Getting Started\n\n- Add it.\n- Use it."
+    listing, _ = _compose(
+        plugins, listings, {"description": {"what": "One.\n\nTwo.", "how": how}}
+    )
+
+    description = listing["description"]
+    blocks = {
+        name: description["text"][start:end]
+        for name, (start, end) in zip(description["blocks"], description["ranges"])
+    }
+    assert blocks["what"] == "One.\n\nTwo."
+    assert blocks["how"] == how
+
+
 def test_media_id_token_resolves_to_the_plugin_id(plugins, listings):
     listing, _ = _compose(
         plugins, listings, {"media": {"thumbnail": "{id}/thumbnail.png"}}

@@ -30,9 +30,12 @@ RESPONSE_SHAPE = {
 
 DRAFTABLE_KEYS = ("title", "tags", "description")
 
-#: Fab's description is structured text, not one prose field and not markdown.
-#: Structure has to be asked for explicitly, with an example, or the model
-#: returns a single unreadable paragraph.
+#: Fab's description is rich text, but it does not render markdown source.
+#: The copy is written in the tiny markup `markup.py` converts, laid out as the
+#: "Crimson Template": the skeleton every top-selling listing shares, dressed
+#: between the plain developer style and the loud showcase style. Structure has
+#: to be asked for explicitly, with an example, or the model returns one
+#: unreadable paragraph.
 DEFAULT_TEMPLATE = """You are writing the store listing copy for an Unreal Engine code plugin \
 that is about to be submitted to Fab, Epic's asset marketplace.
 
@@ -46,46 +49,87 @@ that is about to be submitted to Fab, Epic's asset marketplace.
 
 The category will be chosen from: {categories}.
 
-## How the description is laid out
+## How the description is written
 
-Fab's description is structured text entered as a stack of blocks, not one
-prose field and not markdown. Write copy that maps onto that stack.
+Fab's description is rich text: headings, bullet lists, bold and links. It
+does not render markdown source, so write in this markup and nothing else -
+the app converts it to Fab's formatting:
 
-Structure every area as a short heading line on its own, then one to three
-short paragraphs, or lines beginning with "- " where a list genuinely reads
-better than prose. Keep paragraphs under about sixty words. A single unbroken
-page of text is the one outcome to avoid - break it up with headings.
+- A line starting "## " is a section heading.
+- Lines starting "- " are bullet points.
+- **Double asterisks** make bold.
+- [Link text](https://example.com) is a link.
+- A blank line separates paragraphs and sections.
 
-Use no markdown at all in the copy you return - no hashes, no asterisks, no
-backticks, no bracketed links. All of those appear literally on the page.
-Headings are plain lines of text; emphasis comes from sentence structure, not
-symbols. (The instructions you are reading use markdown; your answer must not.)
+No other markup: no backticks, no single asterisks or underscores, no other
+heading levels. Do not refer to images, screenshots or figures, and never write
+a placeholder for one. Pictures live in the media gallery, which is a separate
+part of the listing - the description is text alone.
 
-Do not refer to images, screenshots or figures, and never write a placeholder
-for one. Pictures live in the media gallery, which is a separate part of the
-listing - the description is text alone.
+## The Crimson Template
 
-An occasional emoji or ASCII mark to head a section is acceptable, but this is
-a professional developer tool: use them sparingly if at all, never more than
-one per section, and never in place of a real heading.
+Every description follows the same layout, in this order:
+
+1. Hook - one bold sentence saying what the reader gets, not what the plugin
+   is called internally.
+2. Link bar - one line of links separated by " • ", built only from the URLs
+   listed under "What the plugin is". Leave out any link that has no URL there
+   and never invent one; if there are none, leave the link bar out.
+3. Pitch - two or three short paragraphs: the problem the reader has, then how
+   this plugin removes it, with one concrete proof point from the facts (C++
+   class count, Blueprint coverage, replication, what it depends on).
+4. "## ✨ Features" - six to twelve bullets, each "**Term** — one line of
+   benefit". No emoji inside the bullets.
+5. "## 🧩 Why It's Built This Way" - optional, one short paragraph or three
+   bullets on design choices a developer will care about.
+6. "## 🛠️ Getting Started" - three to five bullets, the practical steps.
+7. "## 📋 Requirements" - dependencies and prerequisites, in prose.
+8. "## ⚠️ Limitations" - only when there is something true to say; an honest
+   caveat builds more trust than it costs.
+
+Fab collapses the description after about ten lines, so the hook, link bar and
+the start of the pitch are all most buyers read before deciding to click "Show
+more". Make them carry the pitch on their own.
+
+Headings are Title Case with exactly one leading emoji from this set: ✨ 🧩 🛠️
+📋 ⚠️ 💬. This is a professional developer tool: use emoji sparingly - on
+headings only, never in body text - and use no ALL CAPS, no text dividers and
+no hype words. Keep paragraphs under about sixty words and the whole
+description between 2,000 and 3,500 characters.
 
 Say what the plugin does for the reader, not what its classes are called.
 
-A well-shaped area looks like this:
+A well-shaped description looks like this (between the two example lines):
 
-Drop-in inventory for any character
+--- example start ---
+**Drop-in inventory for any character, ready for multiplayer from the first slot.**
 
-Add one component and your character has slots, stacking and weight limits.
-Items are data assets, so designers add new ones without touching C++.
+[Documentation](https://example.com/docs) • [Support](https://example.com/support)
 
-What you get
-- Fragment-based items, so behaviour composes instead of inheriting.
-- Replicated containers with fast array serialisation.
-- A Blueprint API that covers the whole system.
+Every project ends up rebuilding the same inventory: slots, stacking, weight,
+and the replication bugs that come with them. It is weeks of work that ships
+nothing new.
 
-Setting it up
-Add CrimsonInventoryComponent to your pawn, point it at a starting loadout,
-and drive it from Blueprints. No C++ is required to ship with it.
+Add one component and your character has all of it. Items are data assets, so
+designers add new ones without touching C++, and 40 C++ classes sit underneath
+for when you do want to go deeper.
+
+## ✨ Features
+
+- **Fragment-based items** — behaviour composes instead of inheriting.
+- **Replicated containers** — fast array serialisation, prediction included.
+- **Full Blueprint API** — every operation is callable without C++.
+
+## 🛠️ Getting Started
+
+- Add CrimsonInventoryComponent to your pawn.
+- Point it at a starting loadout data asset.
+- Drive it from Blueprints or C++.
+
+## 📋 Requirements
+
+Needs the Gameplay Abilities plugin, which ships with the engine.
+--- example end ---
 
 ## What you have to work with
 
@@ -103,10 +147,12 @@ conventional terms like "inventory", "multiplayer", "blueprint" - not invented
 compounds or your own brand names. Anything Fab does not already know cannot be
 selected, so an exotic tag is a wasted slot.
 
-Write `what` as the pitch a developer skims to decide if this solves their
-problem, `how` as the practical steps to use it in a project, and `technical`
-as prose about prerequisites and integration. The app appends the engine
-version, module list and required-plugin list itself, so do not repeat those.
+Split the description across the three fields in template order: `what` holds
+the hook, link bar, pitch, Features and Why It's Built This Way; `how` holds
+Getting Started; `technical` holds Requirements and Limitations. Each field is
+a JSON string holding the markup above, its line breaks escaped as JSON
+requires. The app appends the engine version, module list and required-plugin
+list after `technical` itself, so do not repeat those.
 """
 
 #: Placeholders the template may use, for the Settings hint.
@@ -121,6 +167,8 @@ def _facts(plugin: PluginInfo, folders: list[str], requirements=None) -> str:
         f"Existing one-line description: {plugin.description or '(none)'}",
         f"Author's category: {plugin.category or '(none)'}",
         f"Engine version: {plugin.engine_version or '(unknown)'}",
+        f"Documentation URL: {plugin.docs_url or '(none)'}",
+        f"Support URL: {plugin.support_url or '(none)'}",
         f"Modules: {modules}",
     ]
     if requirements is not None:

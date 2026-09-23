@@ -191,11 +191,19 @@ def _description(
         for name, text in (("what", what), ("how", how), ("technical", technical))
         if _present(text)
     ]
-    text = "\n\n".join(str(body).strip() for _, body in blocks)
+    bodies = [str(body).strip() for _, body in blocks]
+    text = "\n\n".join(bodies)
+    # Where each block sits in `text`. A block has paragraphs of its own, so
+    # splitting the text on blank lines cannot recover them.
+    ranges, start = [], 0
+    for body in bodies:
+        ranges.append([start, start + len(body)])
+        start += len(body) + 2
     return {
         "text": text,
         "chars": len(text),
         "blocks": [name for name, _ in blocks],
+        "ranges": ranges,
     }
 
 

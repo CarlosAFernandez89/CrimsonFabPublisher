@@ -4,6 +4,36 @@ Release pages on GitHub are built from the matching section of this file.
 Earlier releases are described on their
 [release pages](https://github.com/CarlosAFernandez89/CrimsonFabPublisher/releases).
 
+## 1.3 — 2026-09-23
+
+### Formatted descriptions
+
+Fab's description field is rich text, and the best-selling listings use it:
+headings, bullet lists, bold lead terms and a line of links at the top.
+**Ask Claude** now drafts in that shape, using the *Crimson Template*: a bold
+hook, a link bar, a short problem-to-solution pitch, then **✨ Features**,
+**🛠️ Getting Started**, **📋 Requirements** and, when there is something honest
+to say, **⚠️ Limitations**.
+
+The copy is stored in a small markup (`## ` headings, `- ` bullets, `**bold**`,
+`[text](https://…)` links). **Copy description** in the listing editor puts it on
+the clipboard as formatted text, with a plain-text fallback, ready to paste into
+Fab's description field. Bundles gain
+`description.html` for the same purpose, and `description.txt` is now the
+markup-free fallback. The validator warns about any markup outside that set.
+
+The link bar only uses the `DocsURL` and `SupportURL` from your `.uplugin`, so
+Claude never invents a link.
+
+If you saved a custom prompt template in Settings, you keep it. Press
+**Reset to default** to pick up the new one.
+
+### Fixed
+
+- `description-how.txt` was cut off at the first paragraph break. The listing
+  now records where each description block starts and ends, so a block with
+  several paragraphs is written out whole.
+
 ## 1.2 — 2026-09-23
 
 Building the zip was only half of a Fab submission. The other half — the listing

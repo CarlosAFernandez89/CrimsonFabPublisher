@@ -59,7 +59,8 @@ separate Diff button: it would hash the same zips for less output.
 | File | What it is for |
 |---|---|
 | `listing.md` | The whole listing in Fab-form order. Keep it open beside the browser. |
-| `description.txt` | The description body, select-all and paste. |
+| `description.html` | The description formatted. Open it in a browser, copy, and paste into Fab. |
+| `description.txt` | The description with the markup stripped, for anywhere that takes plain text. |
 | `tags.txt` | One tag per line, because Fab's picker takes them one at a time. |
 | `technical.txt`, `faq.md`, `changelog.md` | Per-section paste sources. |
 | `checklist.md` | A checkbox per field in form order, ending at *Submit for review*. |
@@ -76,6 +77,18 @@ the plugin: its descriptor, modules, dependencies, Blueprint and C++ counts, and
 it ships. Output streams into the page and the Logs as it arrives, and Cancel stops it. If the
 [Claude CLI](https://claude.com/claude-code) is not installed the button copies the prompt
 instead, so the feature degrades rather than disappearing.
+
+Drafts follow the *Crimson Template*: a bold hook, a link bar built only from
+the `.uplugin`'s `DocsURL` and `SupportURL`, a short pitch, then **✨ Features**,
+**🛠️ Getting Started**, **📋 Requirements** and **⚠️ Limitations**. They are
+written in a small markup: `## ` headings, `- ` bullets, `**bold**` and
+`[text](https://…)` links. Nothing else is allowed, and the validator names
+anything outside that set.
+
+**Copy description** — puts the built description on the clipboard as
+formatted text, with a plain-text fallback, so pasting into Fab's description
+field keeps the headings, bullets and bold. It copies what the last Check
+composed.
 
 ## The one rule
 

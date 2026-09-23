@@ -118,7 +118,9 @@ def test_a_missing_content_area_warns_and_names_the_block():
 
 
 @pytest.mark.parametrize(
-    "residue", ["`code`", "**bold**", "[text](url)"], ids=["backtick", "bold", "link"]
+    "residue",
+    ["`code`", "**unclosed", "[text](url)", "\n### Heading"],
+    ids=["backtick", "bold", "link", "heading"],
 )
 def test_residual_markdown_warns(residue):
     issues = check(
@@ -128,6 +130,15 @@ def test_residual_markdown_warns(residue):
     assert any(
         i.key == "description" and "literally" in i.message for i in issues
     )
+
+
+def test_supported_markup_does_not_warn():
+    text = (
+        "## ✨ Features\n\n- **Term** — benefit, see [docs](https://x.dev).\n\n"
+        + GOOD["description"]["text"]
+    )
+
+    assert check(lambda o: o["description"].__setitem__("text", text)) == []
 
 
 # ---------------------------------------------------------------------- tags
