@@ -89,16 +89,15 @@ jobs:
           name: CrimsonFabPublisher-${{ github.sha }}
           path: dist
 
-      # The notes are this version's section of CHANGELOG.md. A single-commit
-      # release gives --generate-notes nothing to say, so it is only the
-      # fallback for a tag the changelog has no entry for.
+      # The notes are this version's section of CHANGELOG.md, unwrapped - a
+      # release body renders every newline as a line break, so the file's hard
+      # wrapping would break paragraphs mid-sentence. A single-commit release
+      # gives --generate-notes nothing to say, so that is only the fallback for
+      # a tag the changelog has no entry for.
       - name: Extract release notes
         run: |
           version="${GITHUB_REF_NAME#v}"
-          awk -v v="$version" '
-            /^## / { if (found) exit; if ($2 == v) { found = 1; next } }
-            found { print }
-          ' CHANGELOG.md > release-notes.md
+          python3 .github/release_notes.py "$version" < CHANGELOG.md > release-notes.md
           if [ -s release-notes.md ]; then
             echo "Using CHANGELOG.md section for $version"
           else
@@ -114,6 +113,17 @@ jobs:
             notes=(--notes-file release-notes.md)
           else
             notes=(--generate-notes)
+          fi
+          # A re-run of an already published tag refreshes its notes and exe
+          # instead of failing on "release already exists".
+          if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            if [ -s release-notes.md ]; then
+              gh release edit "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" \
+                --notes-file release-notes.md
+            fi
+            gh release upload "${GITHUB_REF_NAME}" dist/CrimsonFabPublisher.exe \
+              --repo "${GITHUB_REPOSITORY}" --clobber
+            exit 0
           fi
           gh release create "${GITHUB_REF_NAME}" \
             dist/CrimsonFabPublisher.exe \
