@@ -7,7 +7,7 @@ For each plugin, in build order:
 ```
 RunUAT.bat BuildPlugin
     -Plugin=<path>\<Name>.uplugin
-    -Package=<temp>\CrimsonFabPublisher_Work\<Name>_Build
+    -Package=<work folder>\<Name>_Build
     -Rocket -StrictIncludes -NoHostPlatform -CreateSubFolder
     -TargetPlatforms=Win64+Linux
 ```

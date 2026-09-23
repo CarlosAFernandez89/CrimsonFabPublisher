@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import tempfile
-from pathlib import Path
-
 from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import QColor, QDesktopServices
 from PySide6.QtWidgets import (
@@ -29,11 +26,14 @@ from ...config import config_path, data_dir, state_path
 from ...engines import engine_from_root
 from ...listing import prompt as prompt_mod
 from ...shipfilter import DEFAULT_PATTERNS
-from ..app_settings import AppSettings, default_listings_dir, default_output_dir
+from ..app_settings import (
+    AppSettings,
+    default_listings_dir,
+    default_output_dir,
+    default_work_dir,
+)
 from ..cards import card as _card
 from ..theme import color, mono_font
-
-WORK_ROOT = Path(tempfile.gettempdir()) / "CrimsonFabPublisher_Work"
 
 
 class SettingsPage(QWidget):
@@ -84,18 +84,16 @@ class SettingsPage(QWidget):
             self._path_row("Output folder", self.output_edit, self._browse_output)
         )
 
-        work = QLineEdit(str(WORK_ROOT))
-        work.setReadOnly(True)
-        work.setFont(mono_font(8.5))
+        self.work_edit = QLineEdit(self.settings.work_dir)
+        self.work_edit.setPlaceholderText(str(default_work_dir()))
+        self.work_edit.editingFinished.connect(self._commit_work)
         layout.addLayout(
-            self._path_row(
-                "Work folder",
-                work,
-                lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(WORK_ROOT))),
-                browse_label="Open",
-            )
+            self._path_row("Work folder", self.work_edit, self._browse_work)
         )
-        note = QLabel("Staging for RunUAT output. Cleared after every plugin.")
+        note = QLabel(
+            "Staging for RunUAT output. Cleared after every plugin. Unreal fails "
+            "on paths of 260+ characters, so keep it short (e.g. C:\\UEWork)."
+        )
         note.setProperty("role", "hint")
         layout.addWidget(note)
         return card
@@ -294,6 +292,15 @@ class SettingsPage(QWidget):
 
     def _commit_output(self) -> None:
         self.settings.output_dir = self.output_edit.text().strip()
+
+    def _commit_work(self) -> None:
+        self.settings.work_dir = self.work_edit.text().strip()
+
+    def _browse_work(self) -> None:
+        folder = QFileDialog.getExistingDirectory(self, "Select work folder")
+        if folder:
+            self.work_edit.setText(folder)
+            self._commit_work()
 
     def _browse_root(self) -> None:
         folder = QFileDialog.getExistingDirectory(self, "Select plugins folder")
@@ -512,3 +519,5 @@ class SettingsPage(QWidget):
             self.root_edit.setText(self.settings.plugins_root)
         if self.output_edit.text().strip() != self.settings.output_dir:
             self.output_edit.setText(self.settings.output_dir)
+        if self.work_edit.text().strip() != self.settings.work_dir:
+            self.work_edit.setText(self.settings.work_dir)

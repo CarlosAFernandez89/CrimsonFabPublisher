@@ -6,7 +6,6 @@ controller, log model — wires them to the pages, and computes nothing itself.
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 
 from PySide6.QtCore import QUrl
@@ -136,6 +135,7 @@ class MainWindow(QMainWindow):
         self.build_page.cancel_requested.connect(self.build.cancel)
         self.build_page.engine_changed.connect(self._engine_selected)
         self.build_page.platforms_changed.connect(self._refresh_build_page)
+        self.settings.work_dir_changed.connect(lambda _: self._refresh_build_page())
         self.build_page.platforms_unavailable.connect(self._on_platforms_unavailable)
 
         self.listings_page.check_requested.connect(self._check_listings)
@@ -466,6 +466,7 @@ class MainWindow(QMainWindow):
             self._issues,
             self.settings.effective_output_dir(),
             self.model.plugins(),
+            self.settings.effective_work_dir(),
         )
         self.build_page.refresh(jobs, checked, checks)
 
@@ -489,6 +490,7 @@ class MainWindow(QMainWindow):
             self._issues,
             self.settings.effective_output_dir(),
             self.model.plugins(),
+            self.settings.effective_work_dir(),
         )
         if not checks.ok:
             # The page already shows these; the button is disabled too.
@@ -513,7 +515,7 @@ class MainWindow(QMainWindow):
                 engine=self._selected_engine(),
                 jobs=jobs,
                 platforms=self.settings.platforms,
-                work_root=Path(tempfile.gettempdir()) / "CrimsonFabPublisher_Work",
+                work_root=self.settings.effective_work_dir(),
                 ship_patterns=self.settings.ship_patterns,
                 output_dir=output_dir,
                 hashes=self._current_hashes,

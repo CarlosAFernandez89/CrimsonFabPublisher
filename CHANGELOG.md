@@ -4,6 +4,23 @@ Release pages on GitHub are built from the matching section of this file.
 Earlier releases are described on their
 [release pages](https://github.com/CarlosAFernandez89/CrimsonFabPublisher/releases).
 
+## 1.4 — 2026-09-23
+
+### Path length check
+
+Unreal refuses to compile any file whose path is 260 characters or longer. The
+build compiles your plugin and its dependencies deep inside a work folder, so
+long plugin, module or file names could fail a build after minutes of setup.
+Preflight now works out the longest path each build will create and blocks the
+build if Unreal would reject it. The message names the file and says how many
+characters to save.
+
+### Choose the work folder
+
+The work folder is now a setting in **Settings › Paths**. Leave it blank to keep
+using your temp folder, or pick a short path such as `C:\UEWork` if preflight
+reports long paths.
+
 ## 1.3 — 2026-09-23
 
 ### Formatted descriptions

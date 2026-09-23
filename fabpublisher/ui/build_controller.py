@@ -11,9 +11,10 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
-from ..builder import BUILT_DIRNAME, built_uplugin, submission_zip_name
+from ..builder import BUILT_DIRNAME, built_uplugin, package_dir, submission_zip_name
 from ..dependencies import transitive_dependencies
 from ..models import BuildResult, EngineInfo, Platform, PluginInfo, PluginStatus
+from ..pathlength import MAX_PATH
 from ..state import StateStore
 from ..validation import Issue, check_zip_size
 from .build_progress import BuildProgress
@@ -89,6 +90,42 @@ def unbuildable_dependencies(
     return issues
 
 
+def overlong_build_paths(
+    work_root: Path, jobs: list[PluginInfo], all_plugins: list[PluginInfo]
+) -> list[Issue]:
+    """Jobs that would hit UBT's 260-character path limit in `work_root`.
+
+    UAT copies the job and every suite dependency into one host project, so
+    the longest path in any of them counts against the job.
+    """
+    by_name = {p.name: p for p in all_plugins}
+    issues: list[Issue] = []
+    for job in jobs:
+        host = package_dir(work_root, job.name) / "HostProject" / "Plugins"
+        deps = transitive_dependencies(all_plugins, [job.name]) - {job.name}
+        members = [job, *(by_name[name] for name in deps)]
+        longest = max(
+            (
+                str(host / p.name / p.longest_intermediate)
+                for p in members
+                if p.longest_intermediate
+            ),
+            key=len,
+            default="",
+        )
+        if len(longest) >= MAX_PATH:
+            issues.append(
+                Issue(
+                    "error",
+                    f"{job.name}: build paths would reach {len(longest)} "
+                    f"characters; Unreal fails at {MAX_PATH}. Choose a work "
+                    f"folder at least {len(longest) - MAX_PATH + 1} characters "
+                    f"shorter in Settings. Longest: {longest}",
+                )
+            )
+    return issues
+
+
 def preflight(
     engine: EngineInfo | None,
     platforms: Platform,
@@ -97,6 +134,7 @@ def preflight(
     issues: dict[str, list[Issue]] | None = None,
     output_dir: Path | None = None,
     all_plugins: list[PluginInfo] | None = None,
+    work_root: Path | None = None,
 ) -> Preflight:
     """Everything that used to be a QMessageBox, as data.
 
@@ -114,6 +152,8 @@ def preflight(
         blockers.extend(
             unbuildable_dependencies(output_dir, jobs, all_plugins or jobs)
         )
+    if work_root is not None:
+        blockers.extend(overlong_build_paths(work_root, jobs, all_plugins or jobs))
 
     warnings: list[Issue] = []
     for job in jobs:

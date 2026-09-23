@@ -56,6 +56,9 @@ class Config:
     selected: list[str] = field(default_factory=list)
     ship_patterns: list[str] = field(default_factory=list)
     output_dir: str = ""
+    #: Where RunUAT compiles. Empty means the temp folder. Unreal's paths
+    #: under it must stay below 260 characters, so a short one can matter.
+    work_dir: str = ""
     schema_version: int = 1
     theme: str = "crimson-dark"
     window_geometry: str = ""  # base64 of QMainWindow.saveGeometry()

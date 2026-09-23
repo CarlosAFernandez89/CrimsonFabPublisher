@@ -323,6 +323,11 @@ class _ProgressTail:
             self._emit(line)
 
 
+def package_dir(work_root: Path, plugin_name: str) -> Path:
+    """RunUAT's `-Package` folder; its HostProject is where UBT compiles."""
+    return Path(work_root) / f"{plugin_name}_Build"
+
+
 def run_build(
     engine: EngineInfo,
     plugin: PluginInfo,
@@ -351,7 +356,7 @@ def run_build(
     Returns a BuildResult; on failure the zip step is skipped.
     """
     work_root = Path(work_root)
-    out_dir = work_root / f"{plugin.name}_Build"
+    out_dir = package_dir(work_root, plugin.name)
     stage_dir = work_root / f"{plugin.name}_Staged"
     dep_paths = [built_uplugin(output_dir, dep.name) for dep in dependencies]
 

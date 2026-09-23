@@ -44,6 +44,18 @@ The Epic Launcher registers engines in the registry; anything installed another 
 invisible to it. Add the folder manually — **Settings › Engine installations** — and see
 [Engine Detection](Engine-Detection) for which cases this covers.
 
+## Preflight says build paths would reach 260 characters
+
+Unreal refuses to compile any file whose path is 260 characters or longer. The deepest
+paths are object files inside the work folder, for example
+`<work folder>\<Name>_Build\HostProject\Plugins\<Plugin>\Intermediate\Build\Win64\x64\UnrealEditor\Development\<Module>\<File>.cpp.dep.json`.
+Dependencies are compiled in the same place, so a dependency with a long file name can
+block the plugin that uses it.
+
+Preflight works these paths out from your sources and blocks the build instead of letting
+it fail partway through. Set a shorter **Settings › Paths › Work folder**, such as
+`C:\UEWork`. The message says how many characters you need to save.
+
 ## A plugin shows "missing dep"
 
 It declares a dependency that is neither another plugin in your folder nor part of the

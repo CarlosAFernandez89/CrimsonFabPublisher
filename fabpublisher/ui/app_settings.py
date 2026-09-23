@@ -7,6 +7,7 @@ plus change notification, so no widget is ever the model.
 from __future__ import annotations
 
 import base64
+import tempfile
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal
@@ -32,6 +33,11 @@ def default_output_dir() -> Path:
     app, on the system drive.
     """
     return data_dir() / SUBMISSIONS_DIRNAME
+
+
+def default_work_dir() -> Path:
+    """Where RunUAT compiles when no work folder is set."""
+    return Path(tempfile.gettempdir()) / f"{APP_NAME}_Work"
 
 
 def default_listings_dir() -> Path:
@@ -68,6 +74,7 @@ class AppSettings(QObject):
     selection_changed = Signal(object)  # set[str]
     ship_patterns_changed = Signal(list)
     output_dir_changed = Signal(str)
+    work_dir_changed = Signal(str)
     auto_open_output_changed = Signal(bool)
     auto_select_changed_toggled = Signal(bool)
     custom_engine_roots_changed = Signal(list)
@@ -118,6 +125,22 @@ class AppSettings(QObject):
         if self._c.output_dir:
             return Path(self._c.output_dir)
         return default_output_dir()
+
+    @property
+    def work_dir(self) -> str:
+        return self._c.work_dir
+
+    @work_dir.setter
+    def work_dir(self, value: str) -> None:
+        value = value.strip()
+        if value != self._c.work_dir:
+            self._c.work_dir = value
+            self.work_dir_changed.emit(value)
+
+    def effective_work_dir(self) -> Path:
+        if self._c.work_dir:
+            return Path(self._c.work_dir)
+        return default_work_dir()
 
     # --------------------------------------------------------------- listings
     @property

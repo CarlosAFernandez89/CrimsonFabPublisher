@@ -119,6 +119,8 @@ class PluginInfo:
     #: Fab submission-form counts, filled in by the scan.
     blueprint_count: int = 0
     cpp_class_count: int = 0
+    #: The longest path UBT will write for this plugin, relative to its folder.
+    longest_intermediate: str = ""
     status: PluginStatus = PluginStatus.UNKNOWN
     order: int = 0
 

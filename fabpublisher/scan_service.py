@@ -14,6 +14,7 @@ from .assetstats import count_blueprints, count_cpp_classes
 from .dependencies import classify_dependencies, resubmit_set, topological_order
 from .discovery import discover_plugins, engine_builtin_plugin_names
 from .models import DependencyKind, EngineInfo, PluginInfo, PluginStatus
+from .pathlength import longest_intermediate
 from .state import StateStore, compute_changes
 from .validation import Issue, validate_plugin
 
@@ -90,6 +91,7 @@ class ScanService:
             plugin.status = _status_for(plugin, impact.get(plugin.name))
             plugin.blueprint_count = count_blueprints(plugin.path)
             plugin.cpp_class_count = count_cpp_classes(plugin.path)
+            plugin.longest_intermediate = longest_intermediate(plugin.path)
             found = validate_plugin(plugin, engine_version)
             if found:
                 issues[plugin.name] = found
