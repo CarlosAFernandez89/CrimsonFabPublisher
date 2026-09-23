@@ -387,11 +387,19 @@ def test_the_description_is_copied_rich_and_plain(staged):
 
     from PySide6.QtGui import QGuiApplication
 
-    mime = QGuiApplication.clipboard().mimeData()
-    assert mime.hasHtml()
-    assert "<p>" in mime.html()
-    assert mime.text()
-    assert "**" not in mime.text()
+    clipboard = QGuiApplication.clipboard()
+    try:
+        mime = clipboard.mimeData()
+        assert mime.hasHtml()
+        assert "<p>" in mime.html()
+        assert mime.text()
+        assert "**" not in mime.text()
+    finally:
+        # The offscreen platform (CI) keeps a raw pointer to the QMimeData and
+        # it is freed twice at interpreter exit: every test passes, then the
+        # process segfaults. The real Windows clipboard copies the data, so
+        # only the test needs this.
+        clipboard.clear()
 
 
 def test_copying_nothing_leaves_the_clipboard_alone(qapp):  # noqa: F811
